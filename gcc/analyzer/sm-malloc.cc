@@ -46,6 +46,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "analyzer/function-set.h"
 #include "analyzer/program-state.h"
+#include "gimple-pretty-print.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -428,6 +430,7 @@ private:
   get_or_create_deallocator (tree deallocator_fndecl);
 
   void on_allocator_call (sm_context *sm_ctxt,
+				const supernode *node,
 			  const gcall *call,
 			  const deallocator_set *deallocators,
 			  bool returns_nonnull = false) const;
@@ -960,6 +963,31 @@ public:
   }
 
 };
+
+class bogus_type : public malloc_diagnostic
+{
+public:
+  bogus_type (const malloc_state_machine &sm, tree arg)
+  : malloc_diagnostic (sm, arg)
+  {}
+
+  const char *get_kind () const FINAL OVERRIDE { return "bogus_type"; }
+
+  int get_controlling_option () const FINAL OVERRIDE
+  {
+    return OPT_Wanalyzer_mismatching_deallocation;
+  }
+
+  bool emit (rich_location *rich_loc) FINAL OVERRIDE
+  {
+    /* CWE-476: NULL Pointer Dereference.  */
+    diagnostic_metadata m;
+    m.add_cwe (42);
+    return warning_meta (rich_loc, m, get_controlling_option (),
+			 "Size in allocation is not a multiple of the type");
+  }
+};
+
 
 /* Return true if FNDECL is a C++ method.  */
 
@@ -1629,14 +1657,15 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
       {
 	if (known_allocator_p (callee_fndecl, call))
 	  {
-	    on_allocator_call (sm_ctxt, call, &m_free);
+	    on_allocator_call (sm_ctxt, node, call, &m_free);
+
 	    return true;
 	  }
 
 	if (is_named_call_p (callee_fndecl, "operator new", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_scalar_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_scalar_delete);
 	else if (is_named_call_p (callee_fndecl, "operator new []", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_vector_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_vector_delete);
 	else if (is_named_call_p (callee_fndecl, "operator delete", call, 1)
 		 || is_named_call_p (callee_fndecl, "operator delete", call, 2))
 	  {
@@ -1691,7 +1720,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (callee_fndecl));
 	    bool returns_nonnull
 	      = lookup_attribute ("returns_nonnull", attrs);
-	    on_allocator_call (sm_ctxt, call, deallocators, returns_nonnull);
+	    on_allocator_call (sm_ctxt, node, call, deallocators, returns_nonnull);
 	  }
 
 	/* Handle "__attribute__((nonnull))".   */
@@ -1796,12 +1825,38 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
   return false;
 }
 
+/* Checks whether the type on the left-hand side is
+   compatible with the size argument of an allocation */
+
+static bool malloc_type_is_compatible_with_size_p (tree lhs, tree arg) 
+{
+  tree pointer_type = TREE_TYPE (lhs);
+  // lhs should be a pointer
+  if (TREE_CODE (pointer_type) != POINTER_TYPE)
+    return false;
+  tree pointee_type = TREE_TYPE (pointer_type);
+  // void* is always compatible
+  if (TREE_CODE (pointee_type) == VOID_TYPE)
+    return true;
+  
+  debug_tree (arg);
+
+  tree pointee_size_tree = size_in_bytes(pointee_type);
+  uint pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
+  uint arg_size = TREE_INT_CST_LOW (arg);
+
+
+  // argument must be a multiple of the lhs type
+  return (arg_size % pointee_size) == 0;
+}
+
 /* Handle a call to an allocator.
    RETURNS_NONNULL is true if CALL is to a fndecl known to have
    __attribute__((returns_nonnull)).  */
 
 void
 malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
+           const supernode *node,
 					 const gcall *call,
 					 const deallocator_set *deallocators,
 					 bool returns_nonnull) const
@@ -1814,6 +1869,14 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				 (returns_nonnull
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
+    
+      tree arg = gimple_call_arg (call, 0);
+      if (!malloc_type_is_compatible_with_size_p (lhs, arg))
+      {
+        tree diag_arg = sm_ctxt->get_diagnostic_tree (lhs);
+        sm_ctxt->warn (node, call, lhs,
+              new bogus_type (*this, diag_arg));
+      }
     }
   else
     {
