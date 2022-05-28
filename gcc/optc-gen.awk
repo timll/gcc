@@ -316,9 +316,12 @@ for (i = 0; i < n_opts; i++) {
 		flags[i + 1] = flags[i] " " flags[i + 1];
 		if (help[i + 1] == "")
 			help[i + 1] = help[i]
-		else if (help[i] != "" && help[i + 1] != help[i])
+		else if (help[i] != "" && help[i + 1] != help[i]) {
 			print "#error Multiple different help strings for " \
-				opts[i] ":\n\t" help[i] "\n\t" help[i + 1]
+				opts[i] ":"
+			print "#error   " help[i]
+			print "#error   " help[i + 1]
+		}
 				
 		i++;
 		back_chain[i] = "N_OPTS";
@@ -338,6 +341,13 @@ for (i = 0; i < n_opts; i++) {
 
 	len = length (opts[i]);
 	enum = opt_enum(opts[i])
+
+	# Do not allow Joined and Separate properties if
+	# an options ends with '='.
+	if (flag_set_p("Joined", flags[i]) && flag_set_p("Separate", flags[i]) && opts[i] ~ "=$") {
+		print "#error Option '" opts[i] "' ending with '=' cannot have " \
+			"both Joined and Separate properties"
+	}
 
 	# If this switch takes joined arguments, back-chain all
 	# subsequent switches to it for which it is a prefix.  If

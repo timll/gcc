@@ -165,6 +165,14 @@ c_parse_init (void)
       C_SET_RID_CODE (id, RID_FIRST_INT_N + i);
       C_IS_RESERVED_WORD (id) = 1;
     }
+
+  if (flag_openmp)
+    {
+      id = get_identifier ("omp_all_memory");
+      C_SET_RID_CODE (id, RID_OMP_ALL_MEMORY);
+      C_IS_RESERVED_WORD (id) = 1;
+      ridpointers [RID_OMP_ALL_MEMORY] = id;
+    }
 }
 
 /* A parser structure recording information about the state and
@@ -7669,7 +7677,7 @@ c_parser_conditional_expression (c_parser *parser, struct c_expr *after,
   c_inhibit_evaluation_warnings -= cond.value == truthvalue_true_node;
   location_t loc1 = make_location (exp1.get_start (), exp1.src_range);
   location_t loc2 = make_location (exp2.get_start (), exp2.src_range);
-  if (__builtin_expect (omp_atomic_lhs != NULL, 0)
+  if (UNLIKELY (omp_atomic_lhs != NULL)
       && (TREE_CODE (cond.value) == GT_EXPR
 	  || TREE_CODE (cond.value) == LT_EXPR
 	  || TREE_CODE (cond.value) == EQ_EXPR)
@@ -7865,7 +7873,7 @@ c_parser_binary_expression (c_parser *parser, struct c_expr *after,
     stack[sp].expr							      \
       = convert_lvalue_to_rvalue (stack[sp].loc,			      \
 				  stack[sp].expr, true, true);		      \
-    if (__builtin_expect (omp_atomic_lhs != NULL_TREE, 0) && sp == 1	      \
+    if (UNLIKELY (omp_atomic_lhs != NULL_TREE) && sp == 1		      \
 	&& ((c_parser_next_token_is (parser, CPP_SEMICOLON)		      \
 	     && ((1 << stack[sp].prec)					      \
 		 & ((1 << PREC_BITOR) | (1 << PREC_BITXOR)		      \
@@ -9227,8 +9235,9 @@ c_parser_postfix_expression (c_parser *parser)
 	    if (c_parser_next_token_is (parser, CPP_NAME))
 	      {
 		c_token *comp_tok = c_parser_peek_token (parser);
-		offsetof_ref = build_component_ref
-		  (loc, offsetof_ref, comp_tok->value, comp_tok->location);
+		offsetof_ref
+		  = build_component_ref (loc, offsetof_ref, comp_tok->value,
+					 comp_tok->location, UNKNOWN_LOCATION);
 		c_parser_consume_token (parser);
 		while (c_parser_next_token_is (parser, CPP_DOT)
 		       || c_parser_next_token_is (parser,
@@ -9255,9 +9264,11 @@ c_parser_postfix_expression (c_parser *parser)
 			    break;
 			  }
 			c_token *comp_tok = c_parser_peek_token (parser);
-			offsetof_ref = build_component_ref
-			  (loc, offsetof_ref, comp_tok->value,
-			   comp_tok->location);
+			offsetof_ref
+			  = build_component_ref (loc, offsetof_ref,
+						 comp_tok->value,
+						 comp_tok->location,
+						 UNKNOWN_LOCATION);
 			c_parser_consume_token (parser);
 		      }
 		    else
@@ -10202,6 +10213,13 @@ c_parser_postfix_expression (c_parser *parser)
 	case RID_GENERIC:
 	  expr = c_parser_generic_selection (parser);
 	  break;
+	case RID_OMP_ALL_MEMORY:
+	  gcc_assert (flag_openmp);
+	  c_parser_consume_token (parser);
+	  error_at (loc, "%<omp_all_memory%> may only be used in OpenMP "
+			 "%<depend%> clause");
+	  expr.set_error ();
+	  break;
 	default:
 	  c_parser_error (parser, "expected expression");
 	  expr.set_error ();
@@ -10597,7 +10615,7 @@ c_parser_postfix_expression_after_primary (c_parser *parser,
 	  finish = c_parser_peek_token (parser)->get_finish ();
 	  c_parser_consume_token (parser);
 	  expr.value = build_component_ref (op_loc, expr.value, ident,
-					    comp_loc);
+					    comp_loc, UNKNOWN_LOCATION);
 	  set_c_expr_source_range (&expr, start, finish);
 	  expr.original_code = ERROR_MARK;
 	  if (TREE_CODE (expr.value) != COMPONENT_REF)
@@ -10637,7 +10655,8 @@ c_parser_postfix_expression_after_primary (c_parser *parser,
 					    build_indirect_ref (op_loc,
 								expr.value,
 								RO_ARROW),
-					    ident, comp_loc);
+					    ident, comp_loc,
+					    expr.get_location ());
 	  set_c_expr_source_range (&expr, start, finish);
 	  expr.original_code = ERROR_MARK;
 	  if (TREE_CODE (expr.value) != COMPONENT_REF)
@@ -12752,6 +12771,10 @@ c_parser_omp_clause_name (c_parser *parser)
 	  else if (!strcmp ("dist_schedule", p))
 	    result = PRAGMA_OMP_CLAUSE_DIST_SCHEDULE;
 	  break;
+	case 'e':
+	  if (!strcmp ("enter", p))
+	    result = PRAGMA_OMP_CLAUSE_ENTER;
+	  break;
 	case 'f':
 	  if (!strcmp ("filter", p))
 	    result = PRAGMA_OMP_CLAUSE_FILTER;
@@ -13025,7 +13048,19 @@ c_parser_omp_variable_list (c_parser *parser,
 	  if (c_parser_next_token_is_not (parser, CPP_NAME)
 	      || c_parser_peek_token (parser)->id_kind != C_ID_ID)
 	    {
-	      struct c_expr expr = c_parser_expr_no_commas (parser, NULL);
+	      struct c_expr expr;
+	      if (kind == OMP_CLAUSE_DEPEND
+		  && c_parser_next_token_is_keyword (parser,
+						     RID_OMP_ALL_MEMORY)
+		  && (c_parser_peek_2nd_token (parser)->type == CPP_COMMA
+		      || (c_parser_peek_2nd_token (parser)->type
+			  == CPP_CLOSE_PAREN)))
+		{
+		  expr.value = ridpointers[RID_OMP_ALL_MEMORY];
+		  c_parser_consume_token (parser);
+		}
+	      else
+		expr = c_parser_expr_no_commas (parser, NULL);
 	      if (expr.value != error_mark_node)
 		{
 		  tree u = build_omp_clause (clause_loc, kind);
@@ -13144,6 +13179,7 @@ c_parser_omp_variable_list (c_parser *parser,
 			 && c_parser_next_token_is (parser, CPP_DEREF)))
 		{
 		  location_t op_loc = c_parser_peek_token (parser)->location;
+		  location_t arrow_loc = UNKNOWN_LOCATION;
 		  if (c_parser_next_token_is (parser, CPP_DEREF))
 		    {
 		      c_expr t_expr;
@@ -13154,6 +13190,7 @@ c_parser_omp_variable_list (c_parser *parser,
 		      t_expr = convert_lvalue_to_rvalue (op_loc, t_expr,
 							 true, false);
 		      t = build_indirect_ref (op_loc, t_expr.value, RO_ARROW);
+		      arrow_loc = t_expr.get_location ();
 		    }
 		  c_parser_consume_token (parser);
 		  if (!c_parser_next_token_is (parser, CPP_NAME))
@@ -13167,7 +13204,8 @@ c_parser_omp_variable_list (c_parser *parser,
 		  tree ident = comp_tok->value;
 		  location_t comp_loc = comp_tok->location;
 		  c_parser_consume_token (parser);
-		  t = build_component_ref (op_loc, t, ident, comp_loc);
+		  t = build_component_ref (op_loc, t, ident, comp_loc,
+					   arrow_loc);
 		}
 	      /* FALLTHROUGH  */
 	    case OMP_CLAUSE_AFFINITY:
@@ -16040,7 +16078,7 @@ c_parser_omp_clause_affinity (c_parser *parser, tree list)
    depend ( depend-modifier , depend-kind: variable-list )
 
    depend-kind:
-     in | out | inout | mutexinoutset | depobj
+     in | out | inout | mutexinoutset | depobj | inoutset
 
    depend-modifier:
      iterator ( iterators-definition )  */
@@ -16072,6 +16110,8 @@ c_parser_omp_clause_depend (c_parser *parser, tree list)
 	kind = OMP_CLAUSE_DEPEND_IN;
       else if (strcmp ("inout", p) == 0)
 	kind = OMP_CLAUSE_DEPEND_INOUT;
+      else if (strcmp ("inoutset", p) == 0)
+	kind = OMP_CLAUSE_DEPEND_INOUTSET;
       else if (strcmp ("mutexinoutset", p) == 0)
 	kind = OMP_CLAUSE_DEPEND_MUTEXINOUTSET;
       else if (strcmp ("out", p) == 0)
@@ -17019,9 +17059,13 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OMP_CLAUSE_TO:
 	  if ((mask & (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_LINK)) != 0)
-	    clauses
-	      = c_parser_omp_var_list_parens (parser, OMP_CLAUSE_TO_DECLARE,
-					      clauses);
+	    {
+	      tree nl = c_parser_omp_var_list_parens (parser, OMP_CLAUSE_ENTER,
+						      clauses);
+	      for (tree c = nl; c != clauses; c = OMP_CLAUSE_CHAIN (c))
+		OMP_CLAUSE_ENTER_TO (c) = 1;
+	      clauses = nl;
+	    }
 	  else
 	    clauses = c_parser_omp_clause_to (parser, clauses);
 	  c_name = "to";
@@ -17121,6 +17165,12 @@ c_parser_omp_all_clauses (c_parser *parser, omp_clause_mask mask,
 	    = c_parser_omp_clause_orderedkind (parser, OMP_CLAUSE_SIMD,
 					       clauses);
 	  c_name = "simd";
+	  break;
+	case PRAGMA_OMP_CLAUSE_ENTER:
+	  clauses
+	    = c_parser_omp_var_list_parens (parser, OMP_CLAUSE_ENTER,
+					    clauses);
+	  c_name = "enter";
 	  break;
 	default:
 	  c_parser_error (parser, "expected %<#pragma omp%> clause");
@@ -19036,12 +19086,14 @@ c_parser_omp_depobj (c_parser *parser)
 		    kind = OMP_CLAUSE_DEPEND_INOUT;
 		  else if (!strcmp ("mutexinoutset", p2))
 		    kind = OMP_CLAUSE_DEPEND_MUTEXINOUTSET;
+		  else if (!strcmp ("inoutset", p2))
+		    kind = OMP_CLAUSE_DEPEND_INOUTSET;
 		}
 	      if (kind == OMP_CLAUSE_DEPEND_SOURCE)
 		{
 		  clause = error_mark_node;
-		  error_at (c2_loc, "expected %<in%>, %<out%>, %<inout%> or "
-				    "%<mutexinoutset%>");
+		  error_at (c2_loc, "expected %<in%>, %<out%>, %<inout%>, "
+				    "%<mutexinoutset%> or %<inoutset%>");
 		}
 	      c_parens.skip_until_found_close (parser);
 	    }
@@ -20422,7 +20474,8 @@ c_parser_omp_task (location_t loc, c_parser *parser, bool *if_p)
 */
 
 #define OMP_TASKWAIT_CLAUSE_MASK					\
-	(OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_DEPEND)
+	( (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_DEPEND)		\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_NOWAIT))
 
 static void
 c_parser_omp_taskwait (c_parser *parser)
@@ -21967,6 +22020,7 @@ c_finish_omp_declare_simd (c_parser *parser, tree fndecl, tree parms,
 
 #define OMP_DECLARE_TARGET_CLAUSE_MASK				\
 	( (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_TO)		\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_ENTER)	\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_LINK)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OMP_CLAUSE_DEVICE_TYPE))
 
@@ -21981,7 +22035,7 @@ c_parser_omp_declare_target (c_parser *parser)
 					"#pragma omp declare target");
   else if (c_parser_next_token_is (parser, CPP_OPEN_PAREN))
     {
-      clauses = c_parser_omp_var_list_parens (parser, OMP_CLAUSE_TO_DECLARE,
+      clauses = c_parser_omp_var_list_parens (parser, OMP_CLAUSE_ENTER,
 					      clauses);
       clauses = c_finish_omp_clauses (clauses, C_ORT_OMP);
       c_parser_skip_to_pragma_eol (parser);
@@ -22013,9 +22067,14 @@ c_parser_omp_declare_target (c_parser *parser)
 	id = get_identifier ("omp declare target");
       if (at2)
 	{
-	  error_at (OMP_CLAUSE_LOCATION (c),
-		    "%qD specified both in declare target %<link%> and %<to%>"
-		    " clauses", t);
+	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_ENTER)
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qD specified both in declare target %<link%> and %qs"
+		      " clauses", t, OMP_CLAUSE_ENTER_TO (c) ? "to" : "enter");
+	  else
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qD specified both in declare target %<link%> and "
+		      "%<to%> or %<enter%> clauses", t);
 	  continue;
 	}
       if (!at1)

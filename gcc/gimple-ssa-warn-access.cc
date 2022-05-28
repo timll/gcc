@@ -36,8 +36,8 @@
 #include "gimple-ssa-warn-restrict.h"
 #include "diagnostic-core.h"
 #include "fold-const.h"
-#include "gimple-fold.h"
 #include "gimple-iterator.h"
+#include "gimple-fold.h"
 #include "langhooks.h"
 #include "memmodel.h"
 #include "target.h"
@@ -2853,7 +2853,7 @@ memmodel_name (unsigned HOST_WIDE_INT val)
 {
   val = memmodel_base (val);
 
-  for (unsigned i = 0; i != sizeof memory_models / sizeof *memory_models; ++i)
+  for (unsigned i = 0; i != ARRAY_SIZE (memory_models); ++i)
     {
       if (val == memory_models[i].modval)
 	return memory_models[i].modname;
@@ -3923,7 +3923,8 @@ pass_waccess::warn_invalid_pointer (tree ref, gimple *use_stmt,
       return;
     }
 
-  if ((maybe && warn_dangling_pointer < 2)
+  if (equality
+      || (maybe && warn_dangling_pointer < 2)
       || warning_suppressed_p (use_stmt, OPT_Wdangling_pointer_))
     return;
 
@@ -4241,7 +4242,7 @@ pass_waccess::check_pointer_uses (gimple *stmt, tree ptr,
 	      basic_block use_bb = gimple_bb (use_stmt);
 	      bool this_maybe
 		= (maybe
-		   || !dominated_by_p (CDI_POST_DOMINATORS, use_bb, stmt_bb));
+		   || !dominated_by_p (CDI_POST_DOMINATORS, stmt_bb, use_bb));
 	      warn_invalid_pointer (*use_p->use, use_stmt, stmt, var,
 				    this_maybe, equality);
 	      continue;
@@ -4486,7 +4487,7 @@ pass_waccess::check_dangling_uses (tree var, tree decl, bool maybe /* = false */
 
   basic_block use_bb = gimple_bb (use_stmt);
   basic_block clob_bb = gimple_bb (*pclob);
-  maybe = maybe || !dominated_by_p (CDI_POST_DOMINATORS, use_bb, clob_bb);
+  maybe = maybe || !dominated_by_p (CDI_POST_DOMINATORS, clob_bb, use_bb);
   warn_invalid_pointer (var, use_stmt, *pclob, decl, maybe, false);
 }
 

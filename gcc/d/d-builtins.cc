@@ -475,7 +475,7 @@ d_init_versions (void)
   if (flag_pie)
     VersionCondition::addPredefinedGlobalIdent ("D_PIE");
 
-  if (global.params.doDocComments)
+  if (global.params.ddoc.doOutput)
     VersionCondition::addPredefinedGlobalIdent ("D_Ddoc");
 
   if (global.params.useUnitTests)
@@ -483,6 +483,15 @@ d_init_versions (void)
 
   if (global.params.useAssert == CHECKENABLEon)
     VersionCondition::addPredefinedGlobalIdent ("assert");
+
+  if (global.params.useIn == CHECKENABLEon)
+    VersionCondition::addPredefinedGlobalIdent("D_PreConditions");
+
+  if (global.params.useOut == CHECKENABLEon)
+    VersionCondition::addPredefinedGlobalIdent("D_PostConditions");
+
+  if (global.params.useInvariants == CHECKENABLEon)
+    VersionCondition::addPredefinedGlobalIdent("D_Invariants");
 
   if (global.params.useArrayBounds == CHECKENABLEoff)
     VersionCondition::addPredefinedGlobalIdent ("D_NoBoundsChecks");

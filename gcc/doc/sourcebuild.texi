@@ -1937,6 +1937,9 @@ test system can execute decimal floating point tests.
 
 @item hard_dfp
 Target generates decimal floating point instructions with current options.
+
+@item dfp_bid
+Target uses the BID format for decimal floating point.
 @end table
 
 @subsubsection ARM-specific attributes
@@ -2418,6 +2421,18 @@ setting is Power8 or later.
 @item has_arch_pwr9
 PowerPC target pre-defines macro _ARCH_PWR9 which means the @code{-mcpu}
 setting is Power9 or later.
+@end table
+
+@subsection RISC-V specific attributes
+
+@table @code
+
+@item rv32
+Test system has an integer register width of 32 bits.
+
+@item rv64
+Test system has an integer register width of 64 bits.
+
 @end table
 
 @subsubsection Other hardware attributes

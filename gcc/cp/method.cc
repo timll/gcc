@@ -1465,7 +1465,7 @@ build_comparison_op (tree fndecl, bool defining, tsubst_flags_t complain)
   /* A defaulted comparison operator function for class C is defined as
      deleted if ... C has variant members.  */
   if (TREE_CODE (ctype) == UNION_TYPE
-      && next_initializable_field (TYPE_FIELDS (ctype)))
+      && next_aggregate_field (TYPE_FIELDS (ctype)))
     {
       if (complain & tf_error)
 	inform (info.loc, "cannot default compare union %qT", ctype);
@@ -1518,9 +1518,9 @@ build_comparison_op (tree fndecl, bool defining, tsubst_flags_t complain)
 	}
 
       /* Now compare the field subobjects.  */
-      for (tree field = next_initializable_field (TYPE_FIELDS (ctype));
+      for (tree field = next_aggregate_field (TYPE_FIELDS (ctype));
 	   field;
-	   field = next_initializable_field (DECL_CHAIN (field)))
+	   field = next_aggregate_field (DECL_CHAIN (field)))
 	{
 	  if (DECL_VIRTUAL_P (field) || DECL_FIELD_IS_BASE (field))
 	    /* We ignore the vptr, and we already handled bases.  */
@@ -1542,7 +1542,7 @@ build_comparison_op (tree fndecl, bool defining, tsubst_flags_t complain)
 	      continue;
 	    }
 	  else if (ANON_UNION_TYPE_P (expr_type)
-		   && next_initializable_field (TYPE_FIELDS (expr_type)))
+		   && next_aggregate_field (TYPE_FIELDS (expr_type)))
 	    {
 	      if (complain & tf_error)
 		inform (field_loc, "cannot default compare "
@@ -2056,28 +2056,6 @@ assignable_expr (tree to, tree from)
   return r;
 }
 
-/* An unparsed default member initializer prevents calling a defaulted default
-   constructor; make checking std::is_constructible ill-formed until the DMI
-   has been parsed, to avoid caching the wrong value.  */
-
-static bool
-complain_about_unparsed_dmi (tree t)
-{
-  if (type_has_default_ctor_to_be_synthesized (t)
-      && TYPE_HAS_COMPLEX_DFLT (t))
-    for (tree f = TYPE_FIELDS (t); f; f = DECL_CHAIN (f))
-      if (TREE_CODE (f) == FIELD_DECL
-	  && DECL_INITIAL (f)
-	  && TREE_CODE (DECL_INITIAL (f)) == DEFERRED_PARSE)
-	{
-	  error ("default member initializer for %qD required by %qs before "
-		 "the end of its enclosing class", f, "std::is_constructible");
-	  inform (location_of (f), "defined here");
-	  return true;
-	}
-  return false;
-}
-
 /* The predicate condition for a template specialization
    is_constructible<T, Args...> shall be satisfied if and only if the
    following variable definition would be well-formed for some invented
@@ -2092,8 +2070,6 @@ constructible_expr (tree to, tree from)
   cp_unevaluated cp_uneval_guard;
   if (CLASS_TYPE_P (to))
     {
-      if (!from && complain_about_unparsed_dmi (to))
-	return error_mark_node;
       tree ctype = to;
       vec<tree, va_gc> *args = NULL;
       if (!TYPE_REF_P (to))
