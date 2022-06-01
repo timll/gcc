@@ -971,14 +971,14 @@ public:
   : malloc_diagnostic (sm, arg)
   {}
 
-  const char *get_kind () const FINAL OVERRIDE { return "bogus_type"; }
+  const char *get_kind () const final override { return "bogus_type"; }
 
-  int get_controlling_option () const FINAL OVERRIDE
+  int get_controlling_option () const final override
   {
     return OPT_Wanalyzer_mismatching_deallocation;
   }
 
-  bool emit (rich_location *rich_loc) FINAL OVERRIDE
+  bool emit (rich_location *rich_loc) final override
   {
     /* CWE-476: NULL Pointer Dereference.  */
     diagnostic_metadata m;
@@ -1783,6 +1783,22 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
   if (tree lhs = sm_ctxt->is_zero_assignment (stmt))
     if (any_pointer_p (lhs))
       on_zero_assignment (sm_ctxt, stmt,lhs);
+
+  if (gimple_num_ops (stmt) == 2) {
+    const gassign *assign_stmt = dyn_cast <const gassign *> (stmt);
+    if (assign_stmt) {
+      // XXX: cast assignment
+      tree lhs = gimple_assign_lhs(assign_stmt);
+      tree rhs = gimple_assign_rhs1(assign_stmt);
+      if (any_pointer_p(lhs) && any_pointer_p(rhs)) {
+        // probably an assignment
+        const program_state *state = sm_ctxt->get_old_program_state();
+        const region *l_value = state->m_region_model->get_lvalue(rhs, NULL)->get_base_region();
+        const svalue *capacity = state->m_region_model->get_capacity(l_value);
+        capacity->dump(false);
+      }
+    }
+  }
 
   /* Handle dereferences.  */
   for (unsigned i = 0; i < gimple_num_ops (stmt); i++)
