@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/program-point.h"
 #include "analyzer/store.h"
 #include "analyzer/region-model.h"
+#include "analyzer/program-state.h"
 
 #if ENABLE_ANALYZER
 
@@ -395,6 +396,39 @@ fileptr_state_machine::on_stmt (sm_context *sm_ctxt,
 	      }
 	    return true;
 	  }
+
+  // XXX: mkstemp & mktemp
+  if (is_named_call_p (callee_fndecl, "mkstemp", call, 1))
+    {
+      tree arg = gimple_call_arg (call, 0);
+      const program_state *state = sm_ctxt->get_old_program_state ();
+      const svalue *r_value = state->m_region_model->get_rvalue (arg, NULL);
+      if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value)) 
+        {
+          if (const string_region *str_reg = dyn_cast <const string_region *> (reg->get_pointee())) 
+            {
+              tree str_cst = str_reg->get_string_cst ();
+              size_t len = TREE_STRING_LENGTH (str_cst);
+              const char *str = TREE_STRING_POINTER (str_cst);
+              const char *last = str + (len - 7);
+              if (len < 7 || strncmp(last, "XXXXXX", 6) != 0) 
+                {
+                  rich_location *rich_loc = new rich_location (line_table, gimple_location (stmt));
+                  diagnostic_metadata m;
+                  warning_meta (rich_loc, m, 0, "Invalid argument. The last six characters of template have to be XXXXXX.");
+                }
+            }
+        }
+    }
+  // TODO: warns already in the linker???
+  if (is_named_call_p (callee_fndecl, "mktemp", call, 1))
+    {
+      diagnostic_metadata m;
+      m.add_cwe(273);
+      rich_location *rich_loc = new rich_location (line_table, gimple_location (stmt));
+      // TODO: opt param
+      warning_meta (rich_loc, m, 0, "Usage of mktemp is insecure. Use mkstemp instead.");
+    }
 
 	if (is_file_using_fn_p (callee_fndecl))
 	  {

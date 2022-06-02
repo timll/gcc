@@ -1784,21 +1784,31 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
     if (any_pointer_p (lhs))
       on_zero_assignment (sm_ctxt, stmt,lhs);
 
-  if (gimple_num_ops (stmt) == 2) {
-    const gassign *assign_stmt = dyn_cast <const gassign *> (stmt);
-    if (assign_stmt) {
-      // XXX: cast assignment
-      tree lhs = gimple_assign_lhs(assign_stmt);
-      tree rhs = gimple_assign_rhs1(assign_stmt);
-      if (any_pointer_p(lhs) && any_pointer_p(rhs)) {
-        // probably an assignment
-        const program_state *state = sm_ctxt->get_old_program_state();
-        const region *l_value = state->m_region_model->get_lvalue(rhs, NULL)->get_base_region();
-        const svalue *capacity = state->m_region_model->get_capacity(l_value);
-        capacity->dump(false);
-      }
+  // XXX: Assignment cast size
+  /* Check on assignments that the buffer size still makes sense */
+  if (gimple_num_ops (stmt) == 2) 
+    {
+      if (const gassign *assign_stmt = dyn_cast <const gassign *> (stmt)) 
+        {
+          tree lhs = gimple_assign_lhs (assign_stmt);
+          tree rhs = gimple_assign_rhs1 (assign_stmt);
+          if (any_pointer_p (lhs) && any_pointer_p (rhs)) 
+            {
+              // is an assigment between two pointers
+              const program_state *state = sm_ctxt->get_old_program_state ();
+              const svalue *r_value = state->m_region_model->get_rvalue (rhs, NULL);
+              if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value)) 
+                {
+                  const svalue *capacity = state->m_region_model->get_capacity (reg->get_pointee());
+                  if (const constant_svalue *const_svalue = dyn_cast <const constant_svalue *> (capacity)) 
+                    {
+                      tree cst = const_svalue->get_constant ();
+                      debug_tree (cst);
+                    }
+                }
+            }
+        }
     }
-  }
 
   /* Handle dereferences.  */
   for (unsigned i = 0; i < gimple_num_ops (stmt); i++)
@@ -1888,6 +1898,7 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
     
+      // XXX: cast size on initial assignment
       tree arg = gimple_call_arg (call, 0);
       if (!malloc_type_is_compatible_with_size_p (lhs, arg))
       {
