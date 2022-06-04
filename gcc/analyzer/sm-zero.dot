@@ -1,0 +1,34 @@
+digraph "zero" {
+  /* STATES */
+
+  /* Start state.  */
+  start;
+
+  /* State for a variable that's known to be 0. */
+  zero;
+
+  /* State for a variable that's known to not equal 0. */
+  not_zero;
+
+  /* State for a variable that may be zero but also may be another value. */
+  maybe_zero;
+
+  /* State for values we do not track anymore (e.g. for perfomance reasons). */
+  unknown;
+
+
+  /* TRANSITIONS */
+  start -> zero [label="on 'X = 0'\nor X = y * 0\nor if (X == 0)"];
+
+  start -> not_zero [label="on 'X = c'\nor if (X != 0)\nor if (X == c)\nwith c != 0"];
+
+  zero -> maybe_zero [label="on state merge"];
+  zero -> not_zero [label="on 'X = c'\nor if (X != 0)\nor if (X == c)\nwith c != 0"];
+  zero -> start [label="on some complex expr"];
+
+  not_zero -> maybe_zero [label="on state merge"];
+  not_zero -> zero [label="on 'X = 0'\nor X = y * 0\nor if (X == 0)"];
+  not_zero -> start [label="on some complex expr"];
+
+  maybe_zero -> start [label="on some complex expr"];
+}

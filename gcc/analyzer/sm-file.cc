@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/store.h"
 #include "analyzer/region-model.h"
 #include "analyzer/program-state.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -417,6 +418,10 @@ fileptr_state_machine::on_stmt (sm_context *sm_ctxt,
                   diagnostic_metadata m;
                   warning_meta (rich_loc, m, 0, "Invalid argument. The last six characters of template have to be XXXXXX.");
                 }
+            } else if (const decl_region *decl_reg = dyn_cast <const decl_region *> (reg->get_pointee()))
+            {
+              // const svalue *str = decl_reg->maybe_get_constant_value (state->m_region_model->get_manager ());
+              decl_reg->dump(false);
             }
         }
     }

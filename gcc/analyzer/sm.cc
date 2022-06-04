@@ -175,6 +175,8 @@ make_checkers (auto_delete_vec <state_machine> &out, logger *logger)
   out.safe_push (make_signal_state_machine (logger));
   out.safe_push (make_va_list_state_machine (logger));
 
+  out.safe_push (make_zero_state_machine (logger));
+
   /* We only attempt to run the pattern tests if it might have been manually
      enabled (for DejaGnu purposes).  */
   if (flag_analyzer_checker)
