@@ -19,6 +19,33 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#include "analyzer/analyzer-logging.h"
+#include "analyzer/analyzer-selftests.h"
+#include "analyzer/analyzer.h"
+#include "analyzer/call-string.h"
+#include "analyzer/function-set.h"
+#include "analyzer/pending-diagnostic.h"
+#include "analyzer/program-point.h"
+#include "analyzer/program-state.h"
+#include "analyzer/region-model.h"
+#include "analyzer/sm.h"
+#include "analyzer/store.h"
+#include "basic-block.h"
+#include "config.h"
+#include "coretypes.h"
+#include "diagnostic-event-id.h"
+#include "diagnostic-metadata.h"
+#include "diagnostic-path.h"
+#include "function.h"
+#include "gimple.h"
+#include "json.h"
+#include "options.h"
+#include "print-tree.h"
+#include "selftest.h"
+#include "system.h"
+#include "tree.h"
+#include "tristate.h"
+
 #if ENABLE_ANALYZER
 
 namespace ana
@@ -26,10 +53,13 @@ namespace ana
 
 namespace
 {
+
 // XXX: zero state machine
 class zero_state_machine : public state_machine
 {
 public:
+  zero_state_machine(logger *logger);
+
   bool
   inherited_state_p () const final override
   {
@@ -87,6 +117,15 @@ protected:
   state_t m_not_zero;
 };
 
+zero_state_machine::zero_state_machine (logger *logger)
+    : state_machine ("zero", logger)
+{
+  m_unknown = add_state ("unknown");
+  m_maybe_zero = add_state ("maybezero");  
+  m_zero = add_state ("zero");
+  m_not_zero = add_state ("notzero");
+}
+
 bool
 zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
                              const gimple *stmt)
@@ -113,12 +152,13 @@ zero_state_machine::on_condition (sm_context *sm_ctxt, const supernode *node,
   state_t current = sm_ctxt->get_state (node, lhs);
 
   tree cst = rhs->maybe_get_constant ();
-  if (!cst) {
-    sm_ctxt->on_transition (node, stmt, lhs, current, m_unknown);
-    return;
-  }
+  if (!cst)
+    {
+      sm_ctxt->on_transition (node, stmt, lhs, current, m_unknown);
+      return;
+    }
 
-  bool isZero = zerop(cst);
+  bool isZero = zerop (cst);
   if ((op == NE_EXPR && isZero) || (op == EQ_EXPR && !isZero))
     {
       log ("got 'ARG != 0' or 'ARG == c' match");
