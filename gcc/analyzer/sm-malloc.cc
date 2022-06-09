@@ -964,10 +964,12 @@ public:
 
 };
 
-class bogus_type : public pending_diagnostic
+// XXX: diag
+class bogus_type : public malloc_diagnostic
 {
 public:
-  bogus_type (tree lhs, tree rhs) : m_lhs(lhs), m_rhs(rhs) {}
+  bogus_type (const malloc_state_machine &sm, tree lhs, tree rhs, tree size_tree, unsigned HOST_WIDE_INT size_diff) 
+  : malloc_diagnostic(sm, rhs), m_lhs(lhs), m_size_tree(size_tree), m_size_diff(size_diff) {}
 
   const char *get_kind () const final override { return "bogus_type"; }
 
@@ -980,8 +982,10 @@ public:
   final override
   {
     const bogus_type &other = (const bogus_type &)base_other;
-    return (same_tree_p (m_lhs, other.m_lhs)
-	    && same_tree_p (m_rhs, other.m_rhs));
+    return malloc_diagnostic::subclass_equal_p(other)
+           && same_tree_p (m_lhs, other.m_lhs)
+           && same_tree_p (m_size_tree, other.m_size_tree)
+           && m_size_diff == other.m_size_diff;
   }
 
   bool emit (rich_location *rich_loc) final override
@@ -989,12 +993,28 @@ public:
     diagnostic_metadata m;
     m.add_cwe (131);
     return warning_meta (rich_loc, m, get_controlling_option (),
-			 "Allocation size of %qE is no multiple of the size of %qE.", m_rhs, TREE_TYPE (m_lhs));
+			 "Allocation size of rhs is no multiple of the size of lhs.");
+  }
+
+  label_text describe_state_change (const evdesc::state_change &change)
+    override
+  {
+    if (change.m_old_state == m_sm.get_start_state ()
+	&& unchecked_p (change.m_new_state))
+      // TODO: verify that it's the allocation stmt, not a copy
+      return change.formatted_print ("%E bytes allocated here", m_size_tree);
+    return malloc_diagnostic::describe_state_change (change);
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+    return ev.formatted_print ("Casting %qE to %qT leaves %lu trailing bytes", m_arg, TREE_TYPE (m_lhs), m_size_diff);
   }
 
 private:
   tree m_lhs;
-  tree m_rhs;
+  tree m_size_tree;
+  unsigned HOST_WIDE_INT m_size_diff;
 };
 
 
@@ -1658,13 +1678,14 @@ known_allocator_p (const_tree fndecl, const gcall *call)
 
 
 /* Checks whether the type on the left-hand side is
-   compatible with the size argument of an allocation */
+   compatible with the size argument of an allocation.
+   Returns non-0 if lhs is incompatible with allocation size. */
 
-static bool lhs_type_is_compatible_with_allocation_size_p (tree lhs, tree int_cst) 
+static unsigned HOST_WIDE_INT lhs_type_is_compatible_with_allocation_size_p (tree lhs, tree int_cst) 
 {
-  // do not reason about non-static
+  // TODO: do not reason about non-static for now
   if (TREE_CODE (int_cst) != INTEGER_CST)
-    return true;
+    return 0;
 
   tree pointer_type = TREE_TYPE (lhs);
   // lhs should be a pointer
@@ -1673,14 +1694,14 @@ static bool lhs_type_is_compatible_with_allocation_size_p (tree lhs, tree int_cs
   tree pointee_type = TREE_TYPE (pointer_type);
   // void* is always compatible
   if (TREE_CODE (pointee_type) == VOID_TYPE)
-    return true;
+    return 0;
 
   tree pointee_size_tree = size_in_bytes(pointee_type);
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
   unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (int_cst);
 
   // argument must be a multiple of the lhs type
-  return (alloc_size % pointee_size) == 0;
+  return alloc_size % pointee_size;
 }
 
 /* Implementation of state_machine::on_stmt vfunc for malloc_state_machine.  */
@@ -1839,8 +1860,10 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
                   if (const constant_svalue *const_svalue = dyn_cast <const constant_svalue *> (capacity)) 
                     {
                       tree cst = const_svalue->get_constant ();
-                      if (!lhs_type_is_compatible_with_allocation_size_p (lhs, cst)) {
-                        sm_ctxt->warn (node, stmt, rhs, new bogus_type (lhs, rhs));
+                      unsigned HOST_WIDE_INT size_diff = lhs_type_is_compatible_with_allocation_size_p (lhs, cst);
+                      if (size_diff != 0) {
+                        tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
+                        sm_ctxt->warn (node, stmt, diag_arg, new bogus_type (*this, lhs, diag_arg, cst, size_diff));
                       }
                     }
                 }
@@ -1913,11 +1936,12 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
     
       // XXX: cast size on initial assignment
       tree arg = gimple_call_arg (call, 0);
-      if (!lhs_type_is_compatible_with_allocation_size_p (lhs, arg))
+      unsigned HOST_WIDE_INT size_diff = lhs_type_is_compatible_with_allocation_size_p (lhs, arg);
+      if (size_diff != 0)
         {
           tree diag_arg = sm_ctxt->get_diagnostic_tree (lhs);
-          sm_ctxt->warn (node, call, arg,
-                new bogus_type (lhs, arg));
+          sm_ctxt->warn (node, call, diag_arg,
+                new bogus_type (*this, lhs, diag_arg, arg, size_diff));
         }
     }
   else
