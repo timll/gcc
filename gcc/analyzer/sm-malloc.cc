@@ -1008,7 +1008,7 @@ public:
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
   {
-    return ev.formatted_print ("Casting %qE to %qT leaves %lu trailing bytes", m_arg, TREE_TYPE (m_lhs), m_size_diff);
+    return ev.formatted_print ("Casting %qE to %qT leaves" HOST_WIDE_INT_PRINT_UNSIGNED "trailing bytes", m_arg, TREE_TYPE (m_lhs), m_size_diff);
   }
 
 private:

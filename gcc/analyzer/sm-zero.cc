@@ -89,7 +89,10 @@ public:
                      enum tree_code op ATTRIBUTE_UNUSED,
                      const svalue *rhs ATTRIBUTE_UNUSED) const final override;
 
-  bool can_purge_p (state_t s) const final override;
+  bool can_purge_p (state_t s) const final override 
+  {
+    return true;
+  }
 
   bool
   reset_when_passed_to_unknown_fn_p (state_t s ATTRIBUTE_UNUSED,
@@ -98,83 +101,53 @@ public:
     return is_mutable;
   }
 
-  state_t m_unknown;
-  state_t m_maybe_zero;
+  state_t m_stop;
   state_t m_zero;
-  state_t m_not_zero;
 };
 
 class zero_diagnostic : public pending_diagnostic
 {
- public:
-  zero_diagnostic (const zero_state_machine &sm, tree arg)
-  : m_sm (sm), m_arg(arg)
-  {}
+public:
+  zero_diagnostic(tree arg) : m_arg(arg) {}
 
-  int get_controlling_option () const final override {
+  int get_controlling_option () const final override 
+  {
     return 0;
   }
 
-  bool subclass_equal_p (const pending_diagnostic &base_other) const override
+  bool emit (rich_location *rich_loc) final override 
   {
-    const zero_diagnostic &other = (const zero_diagnostic &)base_other;
-m_set_to_zero;
-    return same_tree_p (m_arg, other.m_arg);
-  }
-
-  /* Vfunc for emitting the diagnostic.  The rich_location will have been
-     populated with a diagnostic_path.
-     Return true if a diagnostic is actually emitted.  */
-  bool emit (rich_location *rich_loc) final override {
     diagnostic_metadata m;
     m.add_cwe(369);
-    return warning_meta (rich_loc, m, get_controlling_option (),
-			   "division by zero");
+    return warning_meta(rich_loc, m, get_controlling_option (), "div by zero");
   }
 
-  const char *get_kind () const final override
+  const char *get_kind () const final override 
   {
-    return "zero";
+    return "zero_diag";
   }
 
-  label_text describe_state_change (const evdesc::state_change &ev) final override
+  bool subclass_equal_p (const pending_diagnostic &other) const final override 
   {
-    if (ev.m_old_state == m_sm.get_start_state () 
-        && ev.m_new_state == m_sm.m_zero)
-      {
-        m_set_to_zero = ev.m_event_id;
-        return ev.formatted_print ("%qE is set to 0 here.",
-					 ev.m_expr);
-      }
-    return label_text ();
-  }
-
-  label_text describe_final_event (const evdesc::final_event &ev) final override
-  {
-    if (m_set_to_zero.known_p ())
-      return ev.formatted_print("%qE is the divisior here and was set to zero at %@", ev.m_expr, &m_set_to_zero);
-    return label_text ();
+    return same_tree_p (m_arg, ((const zero_diagnostic &)other).m_arg);
   }
 
 private:
-  const zero_state_machine &m_sm;
-  diagnostic_event_id_t m_set_to_zero;
   tree m_arg;
 };
 
 zero_state_machine::zero_state_machine (logger *logger)
     : state_machine ("zero", logger)
 {
-  m_unknown = add_state ("unknown");
-  m_maybe_zero = add_state ("maybezero");  
-  m_zero = add_state ("m_zero");
-  m_not_zero = add_state ("notzero");
+  m_stop = add_state ("stop");
+  m_zero = add_state ("zero");
 }
 
 bool
 zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
                              const gimple *stmt) const
 {
+  debug_gimple_stmt ((gimple *) stmt);
   if (const gassign *assign_stmt = dyn_cast<const gassign *> (stmt))
     {
       tree lhs = gimple_assign_lhs (assign_stmt);
@@ -185,11 +158,14 @@ zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
         case INTEGER_CST:
           {
             tree rhs = gimple_assign_rhs1 (assign_stmt);
-            if (zerop (rhs)) {
-              sm_ctxt->on_transition (node, stmt, lhs, m_start, m_zero);
-            }
-            else
-              sm_ctxt->on_transition (node, stmt, lhs, m_start, m_unknown); 
+            if (integer_zerop (rhs)) 
+              {
+                sm_ctxt->on_transition (node, stmt, lhs, m_start, m_zero);
+              }
+            else 
+              {
+                sm_ctxt->on_transition (node, stmt, lhs, m_start, m_stop); 
+              }
             break;
           }
         case TRUNC_DIV_EXPR:
@@ -200,9 +176,22 @@ zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
             tree divisor = gimple_assign_rhs2 (assign_stmt);
             if (sm_ctxt->get_state (stmt, divisor) == m_zero)
               {
-                tree arg = sm_ctxt->get_diagnostic_tree (divisor);
-                sm_ctxt->warn(node, stmt, arg, new zero_diagnostic(*this, arg));
-                sm_ctxt->on_transition (node, stmt, lhs, m_zero, m_unknown);
+                sm_ctxt->set_next_state (stmt, divisor, m_stop);
+                tree diag = sm_ctxt->get_diagnostic_tree (divisor);
+                sm_ctxt->warn (node, stmt, diag, new zero_diagnostic(diag));
+              }
+            break;
+          }
+        case TRUNC_MOD_EXPR:
+        case CEIL_MOD_EXPR:
+        case FLOOR_MOD_EXPR:
+        case ROUND_MOD_EXPR:
+          {
+            tree divisor = gimple_assign_rhs2 (assign_stmt);
+            if (sm_ctxt->get_state (stmt, divisor) == m_zero)
+              {
+                sm_ctxt->set_next_state (stmt, divisor, m_stop);
+                inform(gimple_location (stmt), "mod by zero");
               }
             break;
           }
@@ -219,24 +208,12 @@ zero_state_machine::on_condition (sm_context *sm_ctxt, const supernode *node,
                                   const gimple *stmt, const svalue *lhs,
                                   enum tree_code op, const svalue *rhs) const
 {
-  // state_t current = sm_ctxt->get_state (stmt, lhs);
-  // if (current == m_unknown)
-  //   return;
-
-  // tree cst = rhs->maybe_get_constant ();
-  // if (!cst)
-  //   {
-  //     // If rhs is not known, just go back to start
-  //     sm_ctxt->on_transition (node, stmt, lhs, current, m_unknown);
-  //     return;
-  //   }
-
   // bool isZero = integer_zerop (cst);
   // bool isNonZero = integer_nonzerop (cst);
   // if ((op == NE_EXPR && isZero) || (op == EQ_EXPR && isNonZero))
   //   {
   //     log ("got 'ARG != 0' or 'ARG == c' match");
-  //     sm_ctxt->on_transition (node, stmt, lhs, m_start, m_not_zero);
+  //     sm_ctxt->on_transition (node, stmt, lhs, m_start, m_stop);
   //   }
   // else if (op == EQ_EXPR && isZero)
   //   {
@@ -251,12 +228,6 @@ zero_state_machine::on_phi (sm_context *sm_ctxt ATTRIBUTE_UNUSED,
                             const gphi *phi ATTRIBUTE_UNUSED, 
                             tree rhs ATTRIBUTE_UNUSED) const
 {
-}
-
-bool
-zero_state_machine::can_purge_p (state_t s) const
-{
-  return false;
 }
 } // anonymous namespace
 
