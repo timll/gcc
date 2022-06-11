@@ -416,7 +416,7 @@ fileptr_state_machine::on_stmt (sm_context *sm_ctxt,
                 {
                   rich_location *rich_loc = new rich_location (line_table, gimple_location (stmt));
                   diagnostic_metadata m;
-                  warning_meta (rich_loc, m, 0, "Invalid argument. The last six characters of template have to be XXXXXX.");
+                  // warning_meta (rich_loc, m, 0, "Invalid argument. The last six characters of template have to be XXXXXX.");
                 }
             } else if (const decl_region *decl_reg = dyn_cast <const decl_region *> (reg->get_pointee()))
             {

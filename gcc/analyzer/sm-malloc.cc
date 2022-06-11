@@ -1863,7 +1863,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
                       unsigned HOST_WIDE_INT size_diff = lhs_type_is_compatible_with_allocation_size_p (lhs, cst);
                       if (size_diff != 0) {
                         tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
-                        sm_ctxt->warn (node, stmt, diag_arg, new bogus_type (*this, lhs, diag_arg, cst, size_diff));
+                        // sm_ctxt->warn (node, stmt, diag_arg, new bogus_type (*this, lhs, diag_arg, cst, size_diff));
                       }
                     }
                 }
@@ -1940,8 +1940,8 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
       if (size_diff != 0)
         {
           tree diag_arg = sm_ctxt->get_diagnostic_tree (lhs);
-          sm_ctxt->warn (node, call, diag_arg,
-                new bogus_type (*this, lhs, diag_arg, arg, size_diff));
+          // sm_ctxt->warn (node, call, diag_arg,
+          //       new bogus_type (*this, lhs, diag_arg, arg, size_diff));
         }
     }
   else

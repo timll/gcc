@@ -67,11 +67,14 @@ public:
   state_machine::state_t
   get_default_state (const svalue *sval) const final override
   {
-    // if (tree cst = sval->maybe_get_constant ())
-    //   {
-    //     if (zerop (cst))
-    //       return m_zero;
-    //   }
+    if (const constant_svalue *cst_sval = sval->dyn_cast_constant_svalue ())
+      cst_sval->dump(false);
+
+    if (tree cst = sval->maybe_get_constant ())
+      {
+        if (zerop (cst)) 
+          return m_zero;
+      }
     return m_start;
   }
 
@@ -91,7 +94,7 @@ public:
 
   bool can_purge_p (state_t s) const final override 
   {
-    return true;
+    return false;
   }
 
   bool
@@ -108,7 +111,7 @@ public:
 class zero_diagnostic : public pending_diagnostic
 {
 public:
-  zero_diagnostic(tree arg) : m_arg(arg) {}
+  zero_diagnostic(const zero_state_machine &sm, tree arg) : m_sm(sm), m_arg(arg) {}
 
   int get_controlling_option () const final override 
   {
@@ -122,6 +125,21 @@ public:
     return warning_meta(rich_loc, m, get_controlling_option (), "div by zero");
   }
 
+    label_text describe_state_change (const evdesc::state_change &change)
+    final override
+  {
+    if (change.m_new_state == m_sm.m_zero)
+      {
+	return label_text::borrow ("opened here");
+      }
+    return label_text ();
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+	  return ev.formatted_print ("leaks here");
+  }
+
   const char *get_kind () const final override 
   {
     return "zero_diag";
@@ -133,6 +151,7 @@ public:
   }
 
 private:
+  const zero_state_machine &m_sm;
   tree m_arg;
 };
 
@@ -158,9 +177,9 @@ zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
         case INTEGER_CST:
           {
             tree rhs = gimple_assign_rhs1 (assign_stmt);
-            if (integer_zerop (rhs)) 
+            if (zerop (rhs)) 
               {
-                sm_ctxt->on_transition (node, stmt, lhs, m_start, m_zero);
+                 sm_ctxt->on_transition (node, stmt, lhs, m_start, m_zero);
               }
             else 
               {
@@ -176,9 +195,9 @@ zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
             tree divisor = gimple_assign_rhs2 (assign_stmt);
             if (sm_ctxt->get_state (stmt, divisor) == m_zero)
               {
-                sm_ctxt->set_next_state (stmt, divisor, m_stop);
                 tree diag = sm_ctxt->get_diagnostic_tree (divisor);
-                sm_ctxt->warn (node, stmt, diag, new zero_diagnostic(diag));
+                // sm_ctxt->warn (node, stmt, diag, new zero_diagnostic (*this, diag));
+                sm_ctxt->on_transition (node, stmt, divisor, m_zero, m_stop);
               }
             break;
           }
@@ -190,8 +209,9 @@ zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
             tree divisor = gimple_assign_rhs2 (assign_stmt);
             if (sm_ctxt->get_state (stmt, divisor) == m_zero)
               {
-                sm_ctxt->set_next_state (stmt, divisor, m_stop);
-                inform(gimple_location (stmt), "mod by zero");
+                tree diag = sm_ctxt->get_diagnostic_tree (divisor);
+                // sm_ctxt->warn (node, stmt, diag, new zero_diagnostic (*this, diag));
+                sm_ctxt->on_transition (node, stmt, divisor, m_zero, m_stop);
               }
             break;
           }
