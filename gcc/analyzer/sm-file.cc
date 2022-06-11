@@ -421,7 +421,7 @@ fileptr_state_machine::on_stmt (sm_context *sm_ctxt,
             } else if (const decl_region *decl_reg = dyn_cast <const decl_region *> (reg->get_pointee()))
             {
               // const svalue *str = decl_reg->maybe_get_constant_value (state->m_region_model->get_manager ());
-              decl_reg->dump(false);
+              // decl_reg->dump(false);
             }
         }
     }

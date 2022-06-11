@@ -68,7 +68,7 @@ public:
   get_default_state (const svalue *sval) const final override
   {
     if (const constant_svalue *cst_sval = sval->dyn_cast_constant_svalue ())
-      cst_sval->dump(false);
+      // cst_sval->dump(false);
 
     if (tree cst = sval->maybe_get_constant ())
       {
