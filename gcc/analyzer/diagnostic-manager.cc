@@ -2230,7 +2230,10 @@ diagnostic_manager::prune_for_sm_diagnostic (checker_path *path,
 	    state_change_event *state_change = (state_change_event *)base_event;
 	    gcc_assert (state_change->m_dst_state.m_region_model);
 
-	    if (state_change->m_sval == sval && pending_diagnostic::same_tree_p (state_change->m_var, var))
+      bool isConst = sval->maybe_get_constant () != NULL_TREE;
+	    if ((!isConst && state_change->m_sval == sval) || (isConst
+                                              && state_change->m_sval == sval
+                                              && pending_diagnostic::same_tree_p (state_change->m_var, var)))
 	      {
 		if (state_change->m_origin)
 		  {
