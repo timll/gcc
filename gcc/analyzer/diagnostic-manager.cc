@@ -1313,7 +1313,7 @@ diagnostic_manager::emit_saved_diagnostic (const exploded_graph &eg,
   build_emission_path (pb, *epath, &emission_path);
 
   /* Now prune it to just cover the most pertinent events.  */
-  prune_path (&emission_path, sd.m_sm, sd.m_sval, sd.m_state);
+  prune_path (&emission_path, sd.m_sm, sd.m_var, sd.m_sval, sd.m_state);
 
   /* Add a final event to the path, covering the diagnostic itself.
      We use the final enode from the epath, which might be different from
@@ -1632,6 +1632,7 @@ struct null_assignment_sm_context : public sm_context
 							m_stmt,
 							stack_depth,
 							m_sm,
+							var,
 							var_new_sval,
 							from, to,
 							NULL,
@@ -2105,12 +2106,13 @@ diagnostic_manager::add_events_for_superedge (const path_builder &pb,
 void
 diagnostic_manager::prune_path (checker_path *path,
 				const state_machine *sm,
+				tree var,
 				const svalue *sval,
 				state_machine::state_t state) const
 {
   LOG_FUNC (get_logger ());
   path->maybe_log (get_logger (), "path");
-  prune_for_sm_diagnostic (path, sm, sval, state);
+  prune_for_sm_diagnostic (path, sm, var, sval, state);
   prune_interproc_events (path);
   consolidate_conditions (path);
   finish_pruning (path);
@@ -2155,6 +2157,7 @@ can_be_expr_of_interest_p (tree expr)
 void
 diagnostic_manager::prune_for_sm_diagnostic (checker_path *path,
 					     const state_machine *sm,
+							 tree var,
 					     const svalue *sval,
 					     state_machine::state_t state) const
 {
@@ -2227,7 +2230,7 @@ diagnostic_manager::prune_for_sm_diagnostic (checker_path *path,
 	    state_change_event *state_change = (state_change_event *)base_event;
 	    gcc_assert (state_change->m_dst_state.m_region_model);
 
-	    if (state_change->m_sval == sval)
+	    if (state_change->m_sval == sval && pending_diagnostic::same_tree_p (state_change->m_var, var))
 	      {
 		if (state_change->m_origin)
 		  {

@@ -160,6 +160,7 @@ private:
 
   void prune_path (checker_path *path,
 		   const state_machine *sm,
+       tree var,
 		   const svalue *sval,
 		   state_machine::state_t state) const;
 
@@ -169,6 +170,7 @@ private:
 				state_machine::state_t state) const;
   void prune_for_sm_diagnostic (checker_path *path,
 				const state_machine *sm,
+        tree var,
 				const svalue *sval,
 				state_machine::state_t state) const;
   void update_for_unsuitable_sm_exprs (tree *expr) const;

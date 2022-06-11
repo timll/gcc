@@ -239,6 +239,15 @@ public:
 		      state_machine::state_t to,
 		      const svalue *origin,
 		      const program_state &dst_state);
+  state_change_event (const supernode *node, const gimple *stmt,
+		      int stack_depth,
+		      const state_machine &sm,
+          tree var,
+		      const svalue *sval,
+		      state_machine::state_t from,
+		      state_machine::state_t to,
+		      const svalue *origin,
+		      const program_state &dst_state);
 
   label_text get_desc (bool can_colorize) const final override;
 
@@ -250,6 +259,7 @@ public:
   const supernode *m_node;
   const gimple *m_stmt;
   const state_machine &m_sm;
+  tree m_var;
   const svalue *m_sval;
   state_machine::state_t m_from;
   state_machine::state_t m_to;

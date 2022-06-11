@@ -265,6 +265,27 @@ state_change_event::state_change_event (const supernode *node,
 {
 }
 
+state_change_event::state_change_event (const supernode *node,
+					const gimple *stmt,
+					int stack_depth,
+					const state_machine &sm,
+          tree var,
+					const svalue *sval,
+					state_machine::state_t from,
+					state_machine::state_t to,
+					const svalue *origin,
+					const program_state &dst_state)
+: checker_event (EK_STATE_CHANGE,
+		 stmt->location, node->m_fun->decl,
+		 stack_depth),
+  m_node (node), m_stmt (stmt), m_sm (sm),
+  m_sval (sval), m_from (from), m_to (to),
+  m_origin (origin),
+  m_dst_state (dst_state),
+  m_var (var)
+{
+}
+
 /* Implementation of diagnostic_event::get_desc vfunc for
    state_change_event.
 
