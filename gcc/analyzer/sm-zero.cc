@@ -166,7 +166,7 @@ bool
 zero_state_machine::on_stmt (sm_context *sm_ctxt, const supernode *node,
                              const gimple *stmt) const
 {
-  debug_gimple_stmt ((gimple *) stmt);
+  // debug_gimple_stmt ((gimple *) stmt);
   if (const gassign *assign_stmt = dyn_cast<const gassign *> (stmt))
     {
       tree lhs = gimple_assign_lhs (assign_stmt);
