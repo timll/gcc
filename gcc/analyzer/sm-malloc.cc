@@ -429,6 +429,7 @@ private:
   get_or_create_deallocator (tree deallocator_fndecl);
 
   void on_allocator_call (sm_context *sm_ctxt,
+        const supernode *node,
 			  const gcall *call,
 			  const deallocator_set *deallocators,
 			  bool returns_nonnull = false) const;
@@ -1505,9 +1506,14 @@ public:
         //     "Casting %qE to %qT leaves %wu trailing bytes",
         //     m_arg, TREE_TYPE (m_lhs), m_size_diff);
         // else
+        if (m_alloc_event.known_p ())
           return ev.formatted_print (
             "Casting %qE to %qT leaves %wu trailing bytes",
             m_arg, TREE_TYPE (m_lhs), m_size_diff);
+        else
+          return ev.formatted_print (
+            "Casting a %E byte buffer to %qT leaves %wu trailing bytes", 
+            m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
       }
     else if (m_type == dubious_allocation_type::MISSING_OPERAND)
       {
@@ -1866,15 +1872,14 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
       {
 	if (known_allocator_p (callee_fndecl, call))
 	  {
-	    on_allocator_call (sm_ctxt, call, &m_free);
-      tree lhs = gimple_call_lhs (call);
+	    on_allocator_call (sm_ctxt, node, call, &m_free);
 	    return true;
 	  }
 
 	if (is_named_call_p (callee_fndecl, "operator new", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_scalar_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_scalar_delete);
 	else if (is_named_call_p (callee_fndecl, "operator new []", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_vector_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_vector_delete);
 	else if (is_named_call_p (callee_fndecl, "operator delete", call, 1)
 		 || is_named_call_p (callee_fndecl, "operator delete", call, 2))
 	  {
@@ -1929,7 +1934,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (callee_fndecl));
 	    bool returns_nonnull
 	      = lookup_attribute ("returns_nonnull", attrs);
-	    on_allocator_call (sm_ctxt, call, deallocators, returns_nonnull);
+	    on_allocator_call (sm_ctxt, node, call, deallocators, returns_nonnull);
 	  }
 
 	/* Handle "__attribute__((nonnull))".   */
@@ -2052,6 +2057,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 
 void
 malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
+                                         const supernode *node,
 					 const gcall *call,
 					 const deallocator_set *deallocators,
 					 bool returns_nonnull) const
@@ -2064,6 +2070,16 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				 (returns_nonnull
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
+      
+      const program_state *state = sm_ctxt->get_new_program_state ();
+      const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
+      if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
+        {
+          const svalue *capacity = state->m_region_model->get_capacity 
+                                                    (reg->get_pointee());
+          check_capacity(sm_ctxt, *this, node, call, lhs, 
+                         sm_ctxt->get_fndecl_for_call (call), capacity);
+        }
     }
   else
     {
@@ -2213,7 +2229,7 @@ malloc_state_machine::on_pointer_assignment(sm_context *sm_ctxt,
                       tree lhs,
                       tree rhs) const
 {
-  const program_state *state = sm_ctxt->get_new_program_state ();
+  const program_state *state = sm_ctxt->get_old_program_state ();
   const svalue *r_value = state->m_region_model->get_rvalue (rhs, 
                                                              NULL);
   if (const region_svalue *reg 
