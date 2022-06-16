@@ -1,3 +1,444 @@
+2022-06-15  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.md (DSC): New split pattern and mode iterator.
+
+2022-06-15  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/predicates.md (reload_operand):
+	New predicate.
+	* config/xtensa/xtensa.md: New peephole2 pattern.
+
+2022-06-15  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.md (*round_up_to_even):
+	New insn-and-split pattern.
+	(*signed_ge_zero): Ditto.
+
+2022-06-15  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa-protos.h (xtensa_prepare_expand_call,
+	xtensa_emit_sibcall): New prototypes.
+	(xtensa_expand_epilogue): Add new argument that specifies whether
+	or not sibling call.
+	* config/xtensa/xtensa.cc (TARGET_FUNCTION_OK_FOR_SIBCALL):
+	New macro definition.
+	(xtensa_prepare_expand_call): New function in order to share
+	the common code.
+	(xtensa_emit_sibcall, xtensa_function_ok_for_sibcall):
+	New functions.
+	(xtensa_expand_epilogue): Add new argument sibcall_p and use it
+	for sibling call handling.
+	* config/xtensa/xtensa.md (call, call_value):
+	Use xtensa_prepare_expand_call.
+	(call_internal, call_value_internal):
+	Add the condition in order to be disabled if sibling call.
+	(sibcall, sibcall_value, sibcall_epilogue): New expansions.
+	(sibcall_internal, sibcall_value_internal): New insn patterns,
+	and split ones in order to take care of the indirect sibcalls.
+
+2022-06-15  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* doc/invoke.texi: Document -mextra-l32r-costs= option.
+
+2022-06-15  David Malcolm  <dmalcolm@redhat.com>
+
+	PR analyzer/105962
+	* doc/invoke.texi: Add -fno-analyzer-undo-inlining.
+	* tree-diagnostic-path.cc (default_tree_diagnostic_path_printer):
+	Extend -fdiagnostics-path-format=separate-events so that with
+	-fdiagnostics-show-path-depths it prints fndecls as well as stack
+	depths.
+
+2022-06-15  David Malcolm  <dmalcolm@redhat.com>
+
+	* value-relation.h: Add "final" and "override" to relation_oracle
+	vfunc implementations as appropriate.
+
+2022-06-15  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR middle-end/105975
+	Revert everything apart from the expand_fn_using_insn and
+	expand_direct_optab_fn changes from:
+	* internal-fn.def (DEF_INTERNAL_INSN_FN): New macro.
+	(GOMP_SIMT_ENTER_ALLOC, GOMP_SIMT_EXIT, GOMP_SIMT_LANE)
+	(GOMP_SIMT_LAST_LANE, GOMP_SIMT_ORDERED_PRED, GOMP_SIMT_VOTE_ANY)
+	(GOMP_SIMT_XCHG_BFLY, GOMP_SIMT_XCHG_IDX): Use it.
+	* internal-fn.h (direct_internal_fn_info::directly_mapped): New
+	member variable.
+	(direct_internal_fn_info::vectorizable): Reduce to 1 bit.
+	(direct_internal_fn_p): Also return true for internal functions
+	that map directly to instructions defined target-insns.def.
+	(direct_internal_fn): Adjust comment accordingly.
+	* internal-fn.cc (direct_insn, optab1, optab2, vectorizable_optab1)
+	(vectorizable_optab2): New local macros.
+	(not_direct): Initialize directly_mapped.
+	(mask_load_direct, load_lanes_direct, mask_load_lanes_direct)
+	(gather_load_direct, len_load_direct, mask_store_direct)
+	(store_lanes_direct, mask_store_lanes_direct, vec_cond_mask_direct)
+	(vec_cond_direct, scatter_store_direct, len_store_direct)
+	(vec_set_direct, unary_direct, binary_direct, ternary_direct)
+	(cond_unary_direct, cond_binary_direct, cond_ternary_direct)
+	(while_direct, fold_extract_direct, fold_left_direct)
+	(mask_fold_left_direct, check_ptrs_direct): Use the macros above.
+	(expand_GOMP_SIMT_ENTER_ALLOC, expand_GOMP_SIMT_EXIT): Delete
+	(expand_GOMP_SIMT_LANE, expand_GOMP_SIMT_LAST_LANE): Likewise;
+	(expand_GOMP_SIMT_ORDERED_PRED, expand_GOMP_SIMT_VOTE_ANY): Likewise.
+	(expand_GOMP_SIMT_XCHG_BFLY, expand_GOMP_SIMT_XCHG_IDX): Likewise.
+	(direct_internal_fn_types): Handle functions that map to instructions
+	defined in target-insns.def.
+	(direct_internal_fn_types): Likewise.
+	(direct_internal_fn_supported_p): Likewise.
+	(internal_fn_expanders): Likewise.
+	(expand_fn_using_insn): New function,
+	split out and adapted from...
+	(expand_direct_optab_fn): ...here.
+	(expand_GOMP_SIMT_ENTER_ALLOC): Use it.
+	(expand_GOMP_SIMT_EXIT): Likewise.
+	(expand_GOMP_SIMT_LANE): Likewise.
+	(expand_GOMP_SIMT_LAST_LANE): Likewise.
+	(expand_GOMP_SIMT_ORDERED_PRED): Likewise.
+	(expand_GOMP_SIMT_VOTE_ANY): Likewise.
+	(expand_GOMP_SIMT_XCHG_BFLY): Likewise.
+	(expand_GOMP_SIMT_XCHG_IDX): Likewise.
+
+2022-06-15  Richard Earnshaw  <rearnsha@arm.com>
+
+	PR target/105981
+	* config/arm/arm.cc (gen_cpymem_ldrd_strd): Rename low_reg and hi_reg
+	to first_reg and second_reg respectively.  Initialize them correctly
+	when generating big-endian code.
+
+2022-06-15  Richard Earnshaw  <rearnsha@arm.com>
+
+	PR target/105974
+	* config/arm/arm.cc (arm_bfi_1_p): Use UINTVAL instead of XUINT.
+
+2022-06-15  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/105971
+	* tree-ssa-alias.cc (refs_may_alias_p_2): Put bail-out for
+	FUNCTION_DECL and LABEL_DECL refs after decl-decl disambiguation
+	to leak less surprising alias results.
+
+2022-06-15  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/105969
+	* gimple-ssa-sprintf.cc (get_origin_and_offset_r): Avoid division
+	by zero in overflow check.
+
+2022-06-15  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR tree-optimization/105254
+	PR tree-optimization/105940
+	Revert:
+	* config/aarch64/aarch64.cc
+	(aarch64_vector_costs::determine_suggested_unroll_factor): Take a
+	loop_vec_info as argument.  Restrict the unroll factor to values
+	that divide the VF.
+	(aarch64_vector_costs::finish_cost): Update call accordingly.
+
+2022-06-15  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* read-rtl.cc (find_int): Substitute symbolic constants
+	before converting the string to an integer.
+
+2022-06-15  Roger Sayle  <roger@nextmovesoftware.com>
+	    Richard Biener  <rguenther@suse.de>
+
+	* match.pd (convert (lshift @1 INTEGER_CST@2)): Narrow integer
+	left shifts by a constant when the result is truncated, and the
+	shift constant is well-defined.
+	* tree-vect-patterns.cc (vect_recog_rotate_pattern): Add
+	support for rotations of signed integer types, by lowering
+	using unsigned vector shifts.
+
+2022-06-15  liuhongt  <hongtao.liu@intel.com>
+
+	PR target/105953
+	* config/i386/sse.md (*avx_cmp<mode>3_ltint_not): Force_reg
+	operands[3].
+
+2022-06-14  Surya Kumari Jangala  <jskumari@linux.ibm.com>
+
+	PR rtl-optimization/105041
+	* regrename.cc (check_new_reg_p): Use nregs value from du chain.
+
+2022-06-14  Segher Boessenkool  <segher@kernel.crashing.org>
+
+	* config/rs6000/vsx.md (VS_scalar): Delete.
+	(rest of file): Adjust.
+
+2022-06-14  Jan Hubicka  <hubicka@ucw.cz>
+
+	PR ipa/105739
+	* ipa-prop.cc (ipa_load_from_parm_agg): Punt on volatile loads.
+
+2022-06-14  Philipp Tomsich  <philipp.tomsich@vrull.eu>
+
+	* config/riscv/bitmanip.md: Add split to handle opportunities
+	for slli + sh[123]add.uw
+
+2022-06-14  Philipp Tomsich  <philipp.tomsich@vrull.eu>
+
+	* config/riscv/predicates.md (consecutive_bits_operand):
+	Implement new predicate.
+
+2022-06-14  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/105946
+	* tree-ssa-uninit.cc (maybe_warn_pass_by_reference):
+	Do not look at arguments not specified in the function call.
+
+2022-06-14  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/105965
+	* match.pd (view_convert CONSTRUCTOR): Handle single-element
+	CTOR case.
+
+2022-06-14  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* warning-control.cc (copy_warning) [generic version]: Do not erase
+	the warning data of the destination location when the no-warning
+	bit is not set on the source.
+	(copy_warning) [tree version]: Return early if TO is equal to FROM.
+	(copy_warning) [gimple version]: Likewise.
+
+2022-06-14  Kewen Lin  <linkw@linux.ibm.com>
+
+	PR tree-optimization/105940
+	* tree-vect-loop.cc (vect_analyze_loop_2): Move the place of
+	applying suggested_unroll_factor after start_over.
+
+2022-06-14  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/predicates.md (shifted_mask_operand):
+	New predicate.
+	* config/xtensa/xtensa.md (*andsi3_const_pow2_minus_one):
+	New insn-and-split pattern.
+	(*andsi3_const_negative_pow2, *andsi3_const_shifted_mask,
+	*masktrue_const_pow2_minus_one, *masktrue_const_negative_pow2,
+	*masktrue_const_shifted_mask): Ditto.
+
+2022-06-14  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.md (*masktrue_bitcmpl): New insn pattern.
+
+2022-06-14  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa-protos.h (xtensa_emit_branch):
+	Remove the first argument.
+	(xtensa_emit_bit_branch): Remove it because now called only from the
+	output statement of *bittrue insn pattern.
+	* config/xtensa/xtensa.cc (gen_int_relational): Remove the last
+	argument 'p_invert', and make so that the condition is reversed by
+	itself as needed.
+	(xtensa_expand_conditional_branch): Share the common path, and remove
+	condition inversion code.
+	(xtensa_emit_branch, xtensa_emit_movcc): Simplify by removing the
+	"false side" pattern.
+	(xtensa_emit_bit_branch): Remove it because of the abovementioned
+	reason, and move the function body to *bittrue insn pattern.
+	* config/xtensa/xtensa.md (*bittrue): Transplant the output
+	statement from removed xtensa_emit_bit_branch().
+	(*bfalse, *ubfalse, *bitfalse, *maskfalse): Remove the "false side"
+	insn patterns.
+
+2022-06-14  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/predicates.md (logical_shift_operator,
+	xtensa_shift_per_byte_operator): New predicates.
+	* config/xtensa/xtensa-protos.h (xtensa_shlrd_which_direction):
+	New prototype.
+	* config/xtensa/xtensa.cc (xtensa_shlrd_which_direction):
+	New helper function for funnel shift patterns.
+	* config/xtensa/xtensa.md (ior_op): New code iterator.
+	(*ashlsi3_1): Replace with new split pattern.
+	(*shift_per_byte): Unify *ashlsi3_3x, *ashrsi3_3x and *lshrsi3_3x.
+	(*shift_per_byte_omit_AND_0, *shift_per_byte_omit_AND_1):
+	New insn-and-split patterns that redirect to *xtensa_shift_per_byte,
+	in order to omit unnecessary bitwise AND operation.
+	(*shlrd_reg_<code>, *shlrd_const_<code>, *shlrd_per_byte_<code>,
+	*shlrd_per_byte_<code>_omit_AND):
+	New insn patterns for funnel shifts.
+
+2022-06-13  Jason Merrill  <jason@redhat.com>
+
+	* tree-cfg.cc (pass_warn_function_return::execute): Also check
+	BUILT_IN_TRAP.
+
+2022-06-13  Maciej W. Rozycki  <macro@embecosm.com>
+
+	* config/riscv/riscv.md (length): Remove the explicit setting
+	for "fcmp".
+
+2022-06-13  H.J. Lu  <hjl.tools@gmail.com>
+
+	* common/config/i386/cpuinfo.h (get_available_features): Require
+	AVX for F16C and VAES.
+
+2022-06-13  Uroš Bizjak  <ubizjak@gmail.com>
+
+	PR target/105927
+	* config/i386/predicates.md (register_no_elim_operand):
+	Return true for subreg of a memory operand.
+
+2022-06-13  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* internal-fn.def (DEF_INTERNAL_INSN_FN): New macro.
+	(GOMP_SIMT_ENTER_ALLOC, GOMP_SIMT_EXIT, GOMP_SIMT_LANE)
+	(GOMP_SIMT_LAST_LANE, GOMP_SIMT_ORDERED_PRED, GOMP_SIMT_VOTE_ANY)
+	(GOMP_SIMT_XCHG_BFLY, GOMP_SIMT_XCHG_IDX): Use it.
+	* internal-fn.h (direct_internal_fn_info::directly_mapped): New
+	member variable.
+	(direct_internal_fn_info::vectorizable): Reduce to 1 bit.
+	(direct_internal_fn_p): Also return true for internal functions
+	that map directly to instructions defined target-insns.def.
+	(direct_internal_fn): Adjust comment accordingly.
+	* internal-fn.cc (direct_insn, optab1, optab2, vectorizable_optab1)
+	(vectorizable_optab2): New local macros.
+	(not_direct): Initialize directly_mapped.
+	(mask_load_direct, load_lanes_direct, mask_load_lanes_direct)
+	(gather_load_direct, len_load_direct, mask_store_direct)
+	(store_lanes_direct, mask_store_lanes_direct, vec_cond_mask_direct)
+	(vec_cond_direct, scatter_store_direct, len_store_direct)
+	(vec_set_direct, unary_direct, binary_direct, ternary_direct)
+	(cond_unary_direct, cond_binary_direct, cond_ternary_direct)
+	(while_direct, fold_extract_direct, fold_left_direct)
+	(mask_fold_left_direct, check_ptrs_direct): Use the macros above.
+	(expand_GOMP_SIMT_ENTER_ALLOC, expand_GOMP_SIMT_EXIT): Delete
+	(expand_GOMP_SIMT_LANE, expand_GOMP_SIMT_LAST_LANE): Likewise;
+	(expand_GOMP_SIMT_ORDERED_PRED, expand_GOMP_SIMT_VOTE_ANY): Likewise.
+	(expand_GOMP_SIMT_XCHG_BFLY, expand_GOMP_SIMT_XCHG_IDX): Likewise.
+	(direct_internal_fn_types): Handle functions that map to instructions
+	defined in target-insns.def.
+	(direct_internal_fn_types): Likewise.
+	(direct_internal_fn_supported_p): Likewise.
+	(internal_fn_expanders): Likewise.
+
+2022-06-13  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* internal-fn.cc (expand_fn_using_insn): New function,
+	split out and adapted from...
+	(expand_direct_optab_fn): ...here.
+	(expand_GOMP_SIMT_ENTER_ALLOC): Use it.
+	(expand_GOMP_SIMT_EXIT): Likewise.
+	(expand_GOMP_SIMT_LANE): Likewise.
+	(expand_GOMP_SIMT_LAST_LANE): Likewise.
+	(expand_GOMP_SIMT_ORDERED_PRED): Likewise.
+	(expand_GOMP_SIMT_VOTE_ANY): Likewise.
+	(expand_GOMP_SIMT_XCHG_BFLY): Likewise.
+	(expand_GOMP_SIMT_XCHG_IDX): Likewise.
+
+2022-06-13  Jakub Jelinek  <jakub@redhat.com>
+
+	* omp-expand.cc (expand_omp_target): Remap user provided
+	device clause arguments, -1 to -2 and -2 to -3, either
+	at compile time if constant, or at runtime.
+
+2022-06-13  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* common.opt (finstrument-functions): Set explicit value.
+	(-finstrument-functions-once): New option.
+	* doc/invoke.texi (Program Instrumentation Options): Document it.
+	* gimplify.cc (build_instrumentation_call): New static function.
+	(gimplify_function_tree): Call it to emit the instrumentation calls
+	if -finstrument-functions[-once] is specified.
+
+2022-06-13  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* dwarf2out.cc (output_one_line_info_table): Initialize prev_addr.
+	* gimple.h (gimple_set_location): Do not copy warning data from
+	the previous location when it is UNKNOWN_LOCATION.
+	* optabs.cc (expand_widen_pattern_expr): Always set oprnd{1,2}.
+
+2022-06-13  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/105911
+	* config/i386/i386.md (*ashl<dwi>3_doubleword_mask,
+	*<insn><dwi>3_doubleword_mask): Use operands[3] masked with
+	(<MODE_SIZE> * BITS_PER_UNIT) - 1 as AND operand instead of
+	operands[3] unmodified.
+
+2022-06-12  Simon Wright  <simon@pushface.org>
+
+	PR target/104871
+	* config/darwin-driver.cc (darwin_find_version_from_kernel): If the OS
+	version is darwin20 (macOS 11) or greater, truncate the version to the
+	major number.
+
+2022-06-12  Mark Mentovai  <mark@mentovai.com>
+
+	* config/darwin-c.cc: Make -mmacosx-version-min more future-proof.
+
+2022-06-12  Prathamesh Kulkarni  <prathamesh.kulkarni@linaro.org>
+
+	PR target/96463
+	* config/aarch64/aarch64-sve-builtins-base.cc: Include ssa.h.
+	(svld1rq_impl::fold): Define.
+	* config/aarch64/aarch64.cc (expand_vec_perm_d): Define new members
+	op_mode and op_vec_flags.
+	(aarch64_evpc_reencode): Initialize newd.op_mode and
+	newd.op_vec_flags.
+	(aarch64_evpc_sve_dup): New function.
+	(aarch64_expand_vec_perm_const_1): Gate existing calls to
+	aarch64_evpc_* functions under d->vmode == d->op_mode,
+	and call aarch64_evpc_sve_dup.
+	(aarch64_vectorize_vec_perm_const): Remove assert
+	d->vmode != d->op_mode, and initialize d.op_mode and d.op_vec_flags.
+	* tree-cfg.cc (verify_gimple_assign_ternary): Allow different
+	vector types for lhs and rhs in VEC_PERM_EXPR if rhs3 is
+	constant.
+
+2022-06-11  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa-protos.h (xtensa_constantsynth):
+	New prototype.
+	* config/xtensa/xtensa.cc (xtensa_emit_constantsynth,
+	xtensa_constantsynth_2insn, xtensa_constantsynth_rtx_SLLI,
+	xtensa_constantsynth_rtx_ADDSUBX, xtensa_constantsynth):
+	New backend functions that process the abovementioned logic.
+	(xtensa_emit_move_sequence): Revert the previous changes.
+	* config/xtensa/xtensa.md: New split patterns for integer
+	and floating-point, as the frontend part.
+
+2022-06-11  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.cc (xtensa_rtx_costs): Correct wrong case
+	for ABS and NEG, add missing case for BSWAP and CLRSB, and
+	double the costs for integer divisions using libfuncs if
+	optimizing for speed, in order to take advantage of fast constant
+	division by multiplication.
+	(TARGET_INSN_COST): New macro definition.
+	(xtensa_is_insn_L32R_p, xtensa_insn_cost): New functions for
+	calculating relative costs of a RTL insns, for both of speed and
+	size.
+	* config/xtensa/xtensa.md (return, nop, trap): Correct values of
+	the attribute "length" that depends on TARGET_DENSITY.
+	(define_asm_attributes, blockage, frame_blockage): Add missing
+	attributes.
+	* config/xtensa/xtensa.opt (-mextra-l32r-costs=): New machine-
+	dependent option, however, preparatory work for now.
+
+2022-06-11  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.cc (xtensa_expand_block_set_small_loop):
+	Pass through the block length / loop count conditions if
+	zero-overhead looping is configured and active,
+
+2022-06-11  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.md (mulsidi3, umulsidi3):
+	Split into individual signedness, in order to use libcall
+	"__umulsidi3" but not the other.
+	(<u>mulhisi3): Merge into one by using code iterator.
+	(<u>mulsidi3, mulhisi3, umulhisi3): Remove.
+
+2022-06-11   Michael Meissner  <meissner@linux.ibm.com>
+
+	* config/rs6000/rs6000.cc (rs6000_option_override_internal): Do
+	not generate block copies with vector pair instructions if we are
+	tuning for power10.
+
 2022-06-10  Roger Sayle  <roger@nextmovesoftware.com>
 
 	PR rtl-optimization/7061

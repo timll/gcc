@@ -3439,7 +3439,7 @@ class GTY((chain_next ("%h.parent"), for_user)) module_state {
   bool exported_p : 1;	/* directness != MD_NONE && exported.  */
   bool cmi_noted_p : 1; /* We've told the user about the CMI, don't
 			   do it again  */
-  bool call_init_p : 1; /* This module's global initializer needs
+  bool active_init_p : 1; /* This module's global initializer needs
 			   calling.  */
   bool inform_cmi_p : 1; /* Inform of a read/write.  */
   bool visited_p : 1;    /* A walk-once flag. */
@@ -3523,7 +3523,10 @@ class GTY((chain_next ("%h.parent"), for_user)) module_state {
 
  public:
   /* Read and write module.  */
-  void write (elf_out *to, cpp_reader *);
+  void write_begin (elf_out *to, cpp_reader *,
+		    module_state_config &, unsigned &crc);
+  void write_end (elf_out *to, cpp_reader *,
+		  module_state_config &, unsigned &crc);
   bool read_initial (cpp_reader *);
   bool read_preprocessor (bool);
   bool read_language (bool);
@@ -3545,8 +3548,7 @@ class GTY((chain_next ("%h.parent"), for_user)) module_state {
 
  private:
   /* The README, for human consumption.  */
-  void write_readme (elf_out *to, cpp_reader *,
-		     const char *dialect, unsigned extensions);
+  void write_readme (elf_out *to, cpp_reader *, const char *dialect);
   void write_env (elf_out *to);
 
  private:
@@ -3675,7 +3677,7 @@ module_state::module_state (tree name, module_state *parent, bool partition)
   exported_p = false;
 
   cmi_noted_p = false;
-  call_init_p = false;
+  active_init_p = false;
 
   partition_p = partition;
 
@@ -13954,18 +13956,17 @@ module_state::announce (const char *what) const
      readelf -pgnu.c++.README $(module).gcm */
 
 void
-module_state::write_readme (elf_out *to, cpp_reader *reader,
-			    const char *dialect, unsigned extensions)
+module_state::write_readme (elf_out *to, cpp_reader *reader, const char *dialect)
 {
   bytes_out readme (to);
 
   readme.begin (false);
 
-  readme.printf ("GNU C++ %smodule%s%s",
-		 is_header () ? "header " : is_partition () ? "" : "primary ",
-		 is_header () ? ""
-		 : is_interface () ? " interface" : " implementation",
-		 is_partition () ? " partition" : "");
+  readme.printf ("GNU C++ %s",
+		 is_header () ? "header unit"
+		 : !is_partition () ? "primary interface"
+		 : is_interface () ? "interface partition"
+		 : "internal partition");
 
   /* Compiler's version.  */
   readme.printf ("compiler: %s", version_string);
@@ -14392,12 +14393,14 @@ struct module_state_config {
   unsigned ordinary_locs;
   unsigned macro_locs;
   unsigned ordinary_loc_align;
+  unsigned active_init;
 
 public:
   module_state_config ()
     :dialect_str (get_dialect ()),
      num_imports (0), num_partitions (0), num_entities (0),
-     ordinary_locs (0), macro_locs (0), ordinary_loc_align (0)
+     ordinary_locs (0), macro_locs (0), ordinary_loc_align (0),
+     active_init (0)
   {
   }
 
@@ -17335,7 +17338,9 @@ module_state::write_config (elf_out *to, module_state_config &config,
 
   cfg.u (config.ordinary_locs);
   cfg.u (config.macro_locs);
-  cfg.u (config.ordinary_loc_align);  
+  cfg.u (config.ordinary_loc_align);
+
+  cfg.u (config.active_init);
 
   /* Now generate CRC, we'll have incorporated the inner CRC because
      of its serialization above.  */
@@ -17521,6 +17526,8 @@ module_state::read_config (module_state_config &config)
   config.macro_locs = cfg.u ();
   config.ordinary_loc_align = cfg.u ();
 
+  config.active_init = cfg.u ();
+
  done:
   return cfg.end (from ());
 }
@@ -17560,7 +17567,8 @@ ool_cmp (const void *a_, const void *b_)
 */
 
 void
-module_state::write (elf_out *to, cpp_reader *reader)
+module_state::write_begin (elf_out *to, cpp_reader *reader,
+			   module_state_config &config, unsigned &crc)
 {
   /* Figure out remapped module numbers, which might elide
      partitions.  */
@@ -17656,8 +17664,6 @@ module_state::write (elf_out *to, cpp_reader *reader)
     }
   ool->qsort (ool_cmp);
 
-  unsigned crc = 0;
-  module_state_config config;
   location_map_info map_info = write_prepare_maps (&config);
   unsigned counts[MSC_HWM];
 
@@ -17811,19 +17817,14 @@ module_state::write (elf_out *to, cpp_reader *reader)
   unsigned clusters = counts[MSC_sec_hwm] - counts[MSC_sec_lwm];
   dump () && dump ("Wrote %u clusters, average %u bytes/cluster",
 		   clusters, (bytes + clusters / 2) / (clusters + !clusters));
+  trees_out::instrument ();
 
   write_counts (to, counts, &crc);
-
-  /* And finish up.  */
-  write_config (to, config, crc);
 
   spaces.release ();
   sccs.release ();
 
   vec_free (ool);
-
-  /* Human-readable info.  */
-  write_readme (to, reader, config.dialect_str, extensions);
 
   // FIXME:QOI:  Have a command line switch to control more detailed
   // information (which might leak data you do not want to leak).
@@ -17831,8 +17832,20 @@ module_state::write (elf_out *to, cpp_reader *reader)
   // so-controlled.
   if (false)
     write_env (to);
+}
 
-  trees_out::instrument ();
+// Finish module writing after we've emitted all dynamic initializers. 
+
+void
+module_state::write_end (elf_out *to, cpp_reader *reader,
+			 module_state_config &config, unsigned &crc)
+{
+  /* And finish up.  */
+  write_config (to, config, crc);
+
+  /* Human-readable info.  */
+  write_readme (to, reader, config.dialect_str);
+
   dump () && dump ("Wrote %u sections", to->get_section_limit ());
 }
 
@@ -17914,6 +17927,9 @@ module_state::read_initial (cpp_reader *reader)
   /* Macro maps after the imports.  */
   if (ok && have_locs && !read_macro_maps ())
     ok = false;
+
+  /* Note whether there's an active initializer.  */
+  active_init_p = !is_header () && bool (config.active_init);
 
   gcc_assert (slurp->current == ~0u);
   return ok;
@@ -19040,10 +19056,10 @@ module_determine_import_inits ()
   if (!modules || header_module_p ())
     return false;
 
-  /* Determine call_init_p.  We need the same bitmap allocation
+  /* Prune active_init_p.  We need the same bitmap allocation
      scheme as for the imports member.  */
   function_depth++; /* Disable GC.  */
-  bitmap indirect_imports (BITMAP_GGC_ALLOC ());
+  bitmap covered_imports (BITMAP_GGC_ALLOC ());
 
   bool any = false;
 
@@ -19053,16 +19069,15 @@ module_determine_import_inits ()
     {
       module_state *import = (*modules)[ix];
 
-      if (!import->is_header ()
-	  && !bitmap_bit_p (indirect_imports, ix))
+      if (!import->active_init_p)
+	;
+      else if (bitmap_bit_p (covered_imports, ix))
+	import->active_init_p = false;
+      else
 	{
-	  /* Everything this imports is therefore indirectly
-	     imported.  */
-	  bitmap_ior_into (indirect_imports, import->imports);
-	  /* We don't have to worry about the self-import bit,
-	     because of the single pass.  */
-
-	  import->call_init_p = true;
+	  /* Everything this imports is therefore handled by its
+	     initializer, so doesn't need initializing by us.  */
+	  bitmap_ior_into (covered_imports, import->imports);
 	  any = true;
 	}
     }
@@ -19091,7 +19106,7 @@ module_add_import_initializers ()
   for (unsigned ix = modules->length (); --ix;)
     {
       module_state *import = (*modules)[ix];
-      if (import->call_init_p)
+      if (import->active_init_p)
 	{
 	  tree name = mangle_module_global_init (ix);
 	  tree fndecl = build_lang_decl (FUNCTION_DECL, name, fntype);
@@ -19855,15 +19870,18 @@ maybe_check_all_macros (cpp_reader *reader)
 }
 
 // State propagated from finish_module_processing to fini_modules
+
 struct module_processing_cookie
 {
   elf_out out;
+  module_state_config config;
   char *cmi_name;
   char *tmp_name;
+  unsigned crc;
   bool began;
 
   module_processing_cookie (char *cmi, char *tmp, int fd, int e)
-    : out (fd, e), cmi_name (cmi), tmp_name (tmp), began (false)
+    : out (fd, e), cmi_name (cmi), tmp_name (tmp), crc (0), began (false)
   {
   }
   ~module_processing_cookie ()
@@ -19941,7 +19959,7 @@ finish_module_processing (cpp_reader *reader)
 	  auto loc = input_location;
 	  /* So crashes finger-point the module decl.  */
 	  input_location = state->loc;
-	  state->write (&cookie->out, reader);
+	  state->write_begin (&cookie->out, reader, cookie->config, cookie->crc);
 	  input_location = loc;
 	}
 
@@ -19969,13 +19987,18 @@ finish_module_processing (cpp_reader *reader)
 // the module static initializer is a NOP or not.
 
 static void
-late_finish_module (cpp_reader *reader, module_processing_cookie *cookie)
+late_finish_module (cpp_reader *reader,  module_processing_cookie *cookie,
+		    bool init_fn_non_empty)
 {
   timevar_start (TV_MODULE_EXPORT);
 
   module_state *state = (*modules)[0];
   unsigned n = dump.push (state);
   state->announce ("finishing");
+
+  cookie->config.active_init = init_fn_non_empty;
+  if (cookie->began)
+    state->write_end (&cookie->out, reader, cookie->config, cookie->crc);
 
   if (cookie->out.end () && cookie->cmi_name)
     {
@@ -20016,11 +20039,12 @@ late_finish_module (cpp_reader *reader, module_processing_cookie *cookie)
 }
 
 void
-fini_modules (cpp_reader *reader, void *cookie)
+fini_modules (cpp_reader *reader, void *cookie, bool has_inits)
 {
   if (cookie)
     late_finish_module (reader,
-			static_cast<module_processing_cookie *> (cookie));
+			static_cast<module_processing_cookie *> (cookie),
+			has_inits);
 
   /* We're done with the macro tables now.  */
   vec_free (macro_exports);

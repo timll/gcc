@@ -99,7 +99,7 @@ mangle_internal_decl (Dsymbol *decl, const char *name, const char *suffix)
   return ident;
 }
 
-/* Returns true if DECL is from the gcc.attribute module.  */
+/* Returns true if DECL is from the gcc.attributes module.  */
 
 static bool
 gcc_attribute_p (Dsymbol *decl)
@@ -367,6 +367,10 @@ public:
 	return;
       }
 
+    /* Don't emit any symbols from gcc.attributes module.  */
+    if (gcc_attribute_p (d))
+      return;
+
     /* Add this decl to the current binding level.  */
     tree ctype = build_ctype (d->type);
     if (TYPE_NAME (ctype))
@@ -375,10 +379,6 @@ public:
     /* Anonymous structs/unions only exist as part of others,
        do not output forward referenced structs.  */
     if (d->isAnonymous () || !d->members)
-      return;
-
-    /* Don't emit any symbols from gcc.attribute module.  */
-    if (gcc_attribute_p (d))
       return;
 
     /* Generate TypeInfo.  */
@@ -482,6 +482,11 @@ public:
 	return;
       }
 
+    /* Add this decl to the current binding level.  */
+    tree ctype = TREE_TYPE (build_ctype (d->type));
+    if (TYPE_NAME (ctype))
+      d_pushdecl (TYPE_NAME (ctype));
+
     if (!d->members)
       return;
 
@@ -533,11 +538,6 @@ public:
       = build_constructor (TREE_TYPE (vtblsym->csym), elms);
     d_finish_decl (vtblsym->csym);
 
-    /* Add this decl to the current binding level.  */
-    tree ctype = TREE_TYPE (build_ctype (d->type));
-    if (TYPE_NAME (ctype))
-      d_pushdecl (TYPE_NAME (ctype));
-
     d->semanticRun = PASS::obj;
   }
 
@@ -555,6 +555,11 @@ public:
 		  "had semantic errors when compiling");
 	return;
       }
+
+    /* Add this decl to the current binding level.  */
+    tree ctype = TREE_TYPE (build_ctype (d->type));
+    if (TYPE_NAME (ctype))
+      d_pushdecl (TYPE_NAME (ctype));
 
     if (!d->members)
       return;
@@ -576,11 +581,6 @@ public:
     DECL_INITIAL (d->csym) = layout_classinfo (d);
     d_finish_decl (d->csym);
 
-    /* Add this decl to the current binding level.  */
-    tree ctype = TREE_TYPE (build_ctype (d->type));
-    if (TYPE_NAME (ctype))
-      d_pushdecl (TYPE_NAME (ctype));
-
     d->semanticRun = PASS::obj;
   }
 
@@ -599,6 +599,11 @@ public:
 	return;
       }
 
+    /* Add this decl to the current binding level.  */
+    tree ctype = build_ctype (d->type);
+    if (TREE_CODE (ctype) == ENUMERAL_TYPE && TYPE_NAME (ctype))
+      d_pushdecl (TYPE_NAME (ctype));
+
     if (d->isAnonymous ())
       return;
 
@@ -614,11 +619,6 @@ public:
 	DECL_INITIAL (d->sinit) = build_expr (tc->sym->defaultval, true);
 	d_finish_decl (d->sinit);
       }
-
-    /* Add this decl to the current binding level.  */
-    tree ctype = build_ctype (d->type);
-    if (TYPE_NAME (ctype))
-      d_pushdecl (TYPE_NAME (ctype));
 
     d->semanticRun = PASS::obj;
   }
@@ -776,7 +776,7 @@ public:
     if (d->semanticRun >= PASS::obj)
       return;
 
-    /* Don't emit any symbols from gcc.attribute module.  */
+    /* Don't emit any symbols from gcc.attributes module.  */
     if (gcc_attribute_p (d))
       return;
 
@@ -1343,26 +1343,9 @@ get_symbol_decl (Declaration *decl)
   if (decl->storage_class & STCvolatile)
     TREE_THIS_VOLATILE (decl->csym) = 1;
 
-  /* Visibility attributes are used by the debugger.  */
-  if (decl->visibility.kind == Visibility::private_)
-    TREE_PRIVATE (decl->csym) = 1;
-  else if (decl->visibility.kind == Visibility::protected_)
-    TREE_PROTECTED (decl->csym) = 1;
-
   /* Likewise, so could the deprecated attribute.  */
   if (decl->storage_class & STCdeprecated)
     TREE_DEPRECATED (decl->csym) = 1;
-
-#if TARGET_DLLIMPORT_DECL_ATTRIBUTES
-  /* Have to test for import first.  */
-  if (decl->isImportedSymbol ())
-    {
-      insert_decl_attribute (decl->csym, "dllimport");
-      DECL_DLLIMPORT_P (decl->csym) = 1;
-    }
-  else if (decl->isExport ())
-    insert_decl_attribute (decl->csym, "dllexport");
-#endif
 
   if (decl->isDataseg () || decl->isCodeseg () || decl->isThreadlocal ())
     {
@@ -1373,6 +1356,9 @@ get_symbol_decl (Declaration *decl)
       TREE_STATIC (decl->csym) = 1;
       /* The decl has not been defined -- yet.  */
       DECL_EXTERNAL (decl->csym) = 1;
+
+      /* Visibility attributes are used by the debugger.  */
+      set_visibility_for_decl (decl->csym, decl);
 
       DECL_INSTANTIATED (decl->csym) = (decl->isInstantiated () != NULL);
       set_linkage_for_decl (decl->csym);
@@ -2336,8 +2322,6 @@ build_type_decl (tree type, Dsymbol *dsym)
     }
   else if (type != TYPE_MAIN_VARIANT (type))
     DECL_ORIGINAL_TYPE (decl) = TYPE_MAIN_VARIANT (type);
-
-  rest_of_decl_compilation (decl, DECL_FILE_SCOPE_P (decl), 0);
 }
 
 /* Create a declaration for field NAME of a given TYPE, setting the flags
@@ -2448,4 +2432,38 @@ set_linkage_for_decl (tree decl)
   /* Compiler generated public symbols can appear in multiple contexts.  */
   if (DECL_ARTIFICIAL (decl))
     return d_weak_linkage (decl);
+}
+
+/* NODE is a FUNCTION_DECL, VAR_DECL or RECORD_TYPE for the declaration SYM.
+   Set flags to reflect visibility that NODE will get in the object file.  */
+
+void
+set_visibility_for_decl (tree node, Dsymbol *sym)
+{
+  Visibility visibility = sym->visible ();
+  if (visibility.kind == Visibility::private_)
+    TREE_PRIVATE (node) = 1;
+  else if (visibility.kind == Visibility::protected_)
+    TREE_PROTECTED (node) = 1;
+
+  /* If the declaration was declared `export', append either the dllimport
+     or dllexport attribute.  */
+  if (TARGET_DLLIMPORT_DECL_ATTRIBUTES)
+    {
+      const char *attrname = NULL;
+
+      /* Have to test for import first.  */
+      if (sym->isImportedSymbol ())
+	attrname = "dllimport";
+      else if (sym->isExport ())
+	attrname = "dllexport";
+
+      if (attrname != NULL)
+	{
+	  if (DECL_P (node))
+	    insert_decl_attribute (node, attrname);
+	  else if (TYPE_P (node))
+	    insert_type_attribute (node, attrname);
+	}
+    }
 }

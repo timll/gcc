@@ -425,6 +425,7 @@ Objective-C and Objective-C++ Dialects}.
 -fno-analyzer-state-merge @gol
 -fno-analyzer-state-purge @gol
 -fanalyzer-transitivity @gol
+-fno-analyzer-undo-inlining @gol
 -fanalyzer-verbose-edges @gol
 -fanalyzer-verbose-state-changes @gol
 -fanalyzer-verbosity=@var{level} @gol
@@ -618,7 +619,7 @@ Objective-C and Objective-C++ Dialects}.
 -fno-stack-limit  -fsplit-stack @gol
 -fvtable-verify=@r{[}std@r{|}preinit@r{|}none@r{]} @gol
 -fvtv-counts  -fvtv-debug @gol
--finstrument-functions @gol
+-finstrument-functions  -finstrument-functions-once @gol
 -finstrument-functions-exclude-function-list=@var{sym},@var{sym},@dots{} @gol
 -finstrument-functions-exclude-file-list=@var{file},@var{file},@dots{}} @gol
 -fprofile-prefix-map=@var{old}=@var{new}
@@ -1473,7 +1474,8 @@ See RS/6000 and PowerPC Options.
 -mauto-litpools  -mno-auto-litpools @gol
 -mtarget-align  -mno-target-align @gol
 -mlongcalls  -mno-longcalls @gol
--mabi=@var{abi-type}}
+-mabi=@var{abi-type} @gol
+-mextra-l32r-costs=@var{cycles}}
 
 @emph{zSeries Options}
 See S/390 and zSeries Options.
@@ -5233,7 +5235,10 @@ This option provides additional information when printing control-flow paths
 associated with a diagnostic.
 
 If this is option is provided then the stack depth will be printed for
-each run of events within @option{-fdiagnostics-path-format=separate-events}.
+each run of events within @option{-fdiagnostics-path-format=inline-events}.
+If provided with @option{-fdiagnostics-path-format=separate-events}, then
+the stack depth and function declaration will be appended when printing
+each event.
 
 This is intended for use by GCC developers and plugin developers when
 debugging diagnostics that report interprocedural control flow.
@@ -10201,6 +10206,25 @@ be suppressed, for debugging state-handling issues.
 @opindex fanalyzer-transitivity
 @opindex fno-analyzer-transitivity
 This option enables transitivity of constraints within the analyzer.
+
+@item -fno-analyzer-undo-inlining
+@opindex fanalyzer-undo-inlining
+@opindex fno-analyzer-undo-inlining
+This option is intended for analyzer developers.
+
+@option{-fanalyzer} runs relatively late compared to other code analysis
+tools, and some optimizations have already been applied to the code.  In
+particular function inlining may have occurred, leading to the
+interprocedural execution paths emitted by the analyzer containing
+function frames that don't correspond to those in the original source
+code.
+
+By default the analyzer attempts to reconstruct the original function
+frames, and to emit events showing the inlined calls.
+
+With @option{-fno-analyzer-undo-inlining} this attempt to reconstruct
+the original frame information can be be disabled, which may be of help
+when debugging issues in the analyzer.
 
 @item -fanalyzer-verbose-edges
 This option is intended for analyzer developers.  It enables more
@@ -16394,6 +16418,22 @@ interrupt routines, and any functions from which the profiling functions
 cannot safely be called (perhaps signal handlers, if the profiling
 routines generate output or allocate memory).
 @xref{Common Function Attributes}.
+
+@item -finstrument-functions-once
+@opindex -finstrument-functions-once
+This is similar to @option{-finstrument-functions}, but the profiling
+functions are called only once per instrumented function, i.e. the first
+profiling function is called after the first entry into the instrumented
+function and the second profiling function is called before the exit
+corresponding to this first entry.
+
+The definition of @code{once} for the purpose of this option is a little
+vague because the implementation is not protected against data races.
+As a result, the implementation only guarantees that the profiling
+functions are called at @emph{least} once per process and at @emph{most}
+once per thread, but the calls are always paired, that is to say, if a
+thread calls the first function, then it will call the second function,
+unless it never reaches the exit of the instrumented function.
 
 @item -finstrument-functions-exclude-file-list=@var{file},@var{file},@dots{}
 @opindex finstrument-functions-exclude-file-list
@@ -33510,6 +33550,14 @@ by 8 registers on entry so that its arguments are found in registers
 pointer.  Register window is rotated 8 registers back upon return.
 When this version of the ABI is enabled the C preprocessor symbol
 @code{__XTENSA_WINDOWED_ABI__} is defined.
+
+@item -mextra-l32r-costs=@var{n}
+@opindex mextra-l32r-costs
+Specify an extra cost of instruction RAM/ROM access for @code{L32R}
+instructions, in clock cycles.  This affects, when optimizing for speed,
+whether loading a constant from literal pool using @code{L32R} or
+synthesizing the constant from a small one with a couple of arithmetic
+instructions.  The default value is 0.
 @end table
 
 @node zSeries Options
