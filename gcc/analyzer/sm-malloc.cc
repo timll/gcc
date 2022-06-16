@@ -1816,7 +1816,7 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
   /* Each expr should be a multiple of the size. 
      E.g. used to catch n + sizeof(int) errors.  */
   bool reduce = !non_mult_expr.is_empty ();
-  while (!non_mult_expr.is_empty())
+  while (!non_mult_expr.is_empty() && reduce)
     {
       const svalue *expr_sval = non_mult_expr.pop ();
       reduce &= const_operand_in_sval_p (expr_sval, size_cst);
