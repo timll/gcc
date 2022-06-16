@@ -1458,8 +1458,7 @@ public:
 
   int get_controlling_option () const final override
   {
-    // TODO
-    return 0;
+    return OPT_Wanalyzer_allocation_size;
   }
 
   bool subclass_equal_p (const pending_diagnostic &base_other) const
@@ -1467,6 +1466,7 @@ public:
   {
     const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
     return malloc_diagnostic::subclass_equal_p(other)
+	   && m_type == other.m_type
 	   && same_tree_p (m_lhs, other.m_lhs)
 	   && same_tree_p (m_size_tree, other.m_size_tree)
 	   && m_size_diff == other.m_size_diff;
@@ -1477,7 +1477,7 @@ public:
     diagnostic_metadata m;
     m.add_cwe (131);
     return warning_meta (rich_loc, m, get_controlling_option (),
-		    "Allocation size is not a multiple of the pointee's size");
+		    "Allocated buffer size is not a multiple of the pointee's size");
   }
 
   label_text describe_state_change (const evdesc::state_change &change)
@@ -1501,29 +1501,30 @@ public:
   {
     if (m_type == dubious_allocation_type::CONSTANT_SIZE)
       {
-	// if (m_alloc_event.known_p ())
-	//   return ev.formatted_print (
-	//     "Casting %qE to %qT leaves %wu trailing bytes",
-	//     m_arg, TREE_TYPE (m_lhs), m_size_diff);
-	// else
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
-	    "Casting %qE to %qT leaves %wu trailing bytes",
+	    "Casting %qE to %qT leaves %wu trailing bytes; either the"
+      " allocated size is bogus or the type on the left-hand side is"
+      " wrong",
 	    m_arg, TREE_TYPE (m_lhs), m_size_diff);
 	else
 	  return ev.formatted_print (
-	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes", 
+	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either the"
+      " allocated size is bogus or the type on the left-hand side is"
+      " wrong",
 	    m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
       }
     else if (m_type == dubious_allocation_type::MISSING_OPERAND)
       {
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
-	    "%qE is incompatible with %qT; either the allocation size at %@ is bogus or the type here is wrong",
+	    "%qE is incompatible with %qT; either the allocated size at %@ is bogus"
+      " or the type on the left-hand side is wrong",
 	    m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
 	else
 	  return ev.formatted_print (
-	    "Allocation is incompatible with %qT either the allocation size is bogus or the type here is wrong",
+	    "Allocation is incompatible with %qT; either the allocated size is bogus"
+      " or the type on the left-hand side is wrong",
 	    TREE_TYPE (m_lhs));
       }
 
@@ -2071,15 +2072,20 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
       
-      const program_state *state = sm_ctxt->get_new_program_state ();
-      const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
-      if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
-	{
-	  const svalue *capacity = state->m_region_model->get_capacity 
-						    (reg->get_pointee());
-	  check_capacity(sm_ctxt, *this, node, call, lhs, 
-			 sm_ctxt->get_fndecl_for_call (call), capacity);
-	}
+      if (TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE)
+      {
+        const program_state *state = sm_ctxt->get_new_program_state ();
+        const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
+        if (const region_svalue *reg 
+              = dyn_cast <const region_svalue *> (r_value))
+          {
+            const svalue *capacity = state->m_region_model->get_capacity 
+                                        (reg->get_pointee());
+            check_capacity(sm_ctxt, *this, node, call, lhs,
+              sm_ctxt->get_fndecl_for_call (call), capacity);
+          }
+      }
+
     }
   else
     {
