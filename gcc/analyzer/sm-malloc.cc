@@ -1781,7 +1781,7 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
 	  {
 	    const constant_svalue *cst_sval = curr->dyn_cast_constant_svalue ();
       unsigned HOST_WIDE_INT sval_int
-                              = TREE_INT_CST_LOW (cst_sval->get_constant ());
+			      = TREE_INT_CST_LOW (cst_sval->get_constant ());
       unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (size_cst);
 	    if (sval_int % size_cst_int == 0)
 	      return true;
@@ -1791,15 +1791,15 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
 	  {
 	    const binop_svalue *b_sval = curr->dyn_cast_binop_svalue ();
       if (b_sval->get_op () == MULT_EXPR)
-        {
-          worklist.safe_push (b_sval->get_arg0 ());
-          worklist.safe_push (b_sval->get_arg1 ());
-        } 
+	{
+	  worklist.safe_push (b_sval->get_arg0 ());
+	  worklist.safe_push (b_sval->get_arg1 ());
+	}
       else
-        {
-          non_mult_expr.safe_push (b_sval->get_arg0 ());
-          non_mult_expr.safe_push (b_sval->get_arg1 ());
-        }
+	{
+	  non_mult_expr.safe_push (b_sval->get_arg0 ());
+	  non_mult_expr.safe_push (b_sval->get_arg1 ());
+	}
 	  }
 	  break;
 	case svalue_kind::SK_UNARYOP:
@@ -1865,7 +1865,7 @@ check_capacity (sm_context *sm_ctxt,
     case svalue_kind::SK_BINOP:
     case svalue_kind::SK_UNARYOP:
       {
-	// char * has never any trailing bits
+	// char * has never any trailing bytes
 	if (TREE_INT_CST_LOW (pointee_size_tree) != 1
 	    && !const_operand_in_sval_p (capacity, pointee_size_tree))
 	  {
@@ -2092,16 +2092,16 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
       
       if (TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE)
       {
-        const program_state *state = sm_ctxt->get_new_program_state ();
-        const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
-        if (const region_svalue *reg 
-              = dyn_cast <const region_svalue *> (r_value))
-          {
-            const svalue *capacity = state->m_region_model->get_capacity 
-                                        (reg->get_pointee());
-            check_capacity(sm_ctxt, *this, node, call, lhs,
-              sm_ctxt->get_fndecl_for_call (call), capacity);
-          }
+	const program_state *state = sm_ctxt->get_new_program_state ();
+	const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
+	if (const region_svalue *reg 
+	      = dyn_cast <const region_svalue *> (r_value))
+	  {
+	    const svalue *capacity = state->m_region_model->get_capacity 
+					(reg->get_pointee());
+	    check_capacity(sm_ctxt, *this, node, call, lhs,
+	      sm_ctxt->get_fndecl_for_call (call), capacity);
+	  }
       }
 
     }
