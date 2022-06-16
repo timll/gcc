@@ -1819,9 +1819,9 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
   while (!non_mult_expr.is_empty())
     {
       const svalue *expr_sval = non_mult_expr.pop ();
-      bool result = const_operand_in_sval_p (expr_sval, size_cst);
+      reduce &= const_operand_in_sval_p (expr_sval, size_cst);
     }
-  return false;
+  return reduce;
 }
 
 static void
