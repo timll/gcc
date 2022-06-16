@@ -47,6 +47,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/function-set.h"
 #include "analyzer/program-state.h"
 #include "print-tree.h"
+#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -449,6 +450,11 @@ private:
   void on_pointer_assignment(sm_context *sm_ctxt,
 			     const supernode *node,
 			     const gassign *assign_stmt,
+			     tree lhs,
+			     tree rhs) const;
+  void on_pointer_assignment(sm_context *sm_ctxt,
+			     const supernode *node,
+			     const gcall *call,
 			     tree lhs,
 			     tree rhs) const;
   void on_zero_assignment (sm_context *sm_ctxt,
@@ -2009,6 +2015,12 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	      = mutable_this->get_or_create_deallocator (callee_fndecl);
 	    on_deallocator_call (sm_ctxt, node, call, d, dealloc_argno);
 	  }
+
+	tree lhs = gimple_call_lhs (call);
+	if (lhs && TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE
+		&& TREE_CODE (gimple_call_return_type (call)) == POINTER_TYPE)
+	  on_pointer_assignment (sm_ctxt, node, call, lhs, 
+				gimple_call_fn (call));
       }
 
   if (tree lhs = sm_ctxt->is_zero_assignment (stmt))
@@ -2091,19 +2103,7 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				  : deallocators->m_unchecked));
       
       if (TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE)
-      {
-	const program_state *state = sm_ctxt->get_new_program_state ();
-	const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
-	if (const region_svalue *reg 
-	      = dyn_cast <const region_svalue *> (r_value))
-	  {
-	    const svalue *capacity = state->m_region_model->get_capacity 
-					(reg->get_pointee());
-	    check_capacity(sm_ctxt, *this, node, call, lhs,
-	      sm_ctxt->get_fndecl_for_call (call), capacity);
-	  }
-      }
-
+	on_pointer_assignment (sm_ctxt, node, call, lhs, gimple_call_fn (call));
     }
   else
     {
@@ -2247,21 +2247,36 @@ malloc_state_machine::on_realloc_call (sm_context *sm_ctxt,
 */
 
 void
-malloc_state_machine::on_pointer_assignment(sm_context *sm_ctxt,
+malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 		      const supernode *node,
 		      const gassign *assign_stmt,
 		      tree lhs,
 		      tree rhs) const
 {
   const program_state *state = sm_ctxt->get_old_program_state ();
-  const svalue *r_value = state->m_region_model->get_rvalue (rhs, 
-							     NULL);
-  if (const region_svalue *reg 
-	= dyn_cast <const region_svalue *> (r_value))
+  const svalue *r_value = state->m_region_model->get_rvalue (rhs, NULL);
+  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
     {
       const svalue *capacity = state->m_region_model->get_capacity 
 						(reg->get_pointee());
       check_capacity(sm_ctxt, *this, node, assign_stmt, lhs, rhs, capacity);
+    }
+}
+
+void
+malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
+		      const supernode *node,
+		      const gcall *call,
+		      tree lhs,
+		      tree fn_decl) const
+{
+  const program_state *state = sm_ctxt->get_new_program_state ();
+  const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
+  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
+    {
+      const svalue *capacity = state->m_region_model->get_capacity 
+						(reg->get_pointee ());
+      check_capacity(sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
     }
 }
 
