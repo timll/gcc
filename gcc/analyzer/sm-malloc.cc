@@ -2300,7 +2300,7 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
   /* Do not warn if lhs and rhs are of the same type to not emit duplicate
       warnings on assignments after the cast. */
   if (pending_diagnostic::same_tree_p 
-        (TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
+	(TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
     return;
 
   const program_state *state = sm_ctxt->get_new_program_state ();
@@ -2309,7 +2309,11 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
     {
       const svalue *capacity = state->m_region_model->get_capacity 
 	    (reg->get_pointee ());
-      check_capacity(sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
+      check_capacity (sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
+    }
+  else if (const conjured_svalue *con = dyn_cast <const conjured_svalue *> (r_value))
+    {
+      // FIXME: How to get a region_svalue? 
     }
 }
 
