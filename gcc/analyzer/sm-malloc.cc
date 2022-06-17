@@ -1843,11 +1843,16 @@ check_capacity (sm_context *sm_ctxt,
   gcc_assert (TREE_CODE (pointer_type) == POINTER_TYPE);
 
   tree pointee_type = TREE_TYPE (pointer_type);
-  // void * is always compatible
+  /* void * is always compatible */
   if (TREE_CODE (pointee_type) == VOID_TYPE)
     return;
-  
+
   tree pointee_size_tree = size_in_bytes(pointee_type);
+  /* The size might be unknown e.g. being a array with n elements
+     or casting to char * never has any trailing bytes */
+  if (TREE_CODE (pointee_size_tree) != INTEGER_CST
+      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
+    return;
 
   switch (capacity->get_kind ())
     {
@@ -1871,9 +1876,7 @@ check_capacity (sm_context *sm_ctxt,
     case svalue_kind::SK_BINOP:
     case svalue_kind::SK_UNARYOP:
       {
-	// char * has never any trailing bytes
-	if (TREE_INT_CST_LOW (pointee_size_tree) != 1
-	    && !const_operand_in_sval_p (capacity, pointee_size_tree))
+	if (!const_operand_in_sval_p (capacity, pointee_size_tree))
 	  {
 	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
 	    sm_ctxt->warn (node, stmt, diag_arg, 
@@ -2016,6 +2019,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    on_deallocator_call (sm_ctxt, node, call, d, dealloc_argno);
 	  }
 
+  /* Handle returns from function calls */ 
 	tree lhs = gimple_call_lhs (call);
 	if (lhs && TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE
 		&& TREE_CODE (gimple_call_return_type (call)) == POINTER_TYPE)
@@ -2253,12 +2257,17 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 		      tree lhs,
 		      tree rhs) const
 {
+  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
+      warnings on assignments after the cast. */
+  if (pending_diagnostic::same_tree_p (TREE_TYPE (lhs), TREE_TYPE (rhs)))
+    return;
+
   const program_state *state = sm_ctxt->get_old_program_state ();
   const svalue *r_value = state->m_region_model->get_rvalue (rhs, NULL);
   if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
     {
       const svalue *capacity = state->m_region_model->get_capacity 
-						(reg->get_pointee());
+	    (reg->get_pointee ());
       check_capacity(sm_ctxt, *this, node, assign_stmt, lhs, rhs, capacity);
     }
 }
@@ -2270,12 +2279,18 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 		      tree lhs,
 		      tree fn_decl) const
 {
+  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
+      warnings on assignments after the cast. */
+  if (pending_diagnostic::same_tree_p 
+        (TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
+    return;
+
   const program_state *state = sm_ctxt->get_new_program_state ();
   const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
   if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
     {
       const svalue *capacity = state->m_region_model->get_capacity 
-						(reg->get_pointee ());
+	    (reg->get_pointee ());
       check_capacity(sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
     }
 }
