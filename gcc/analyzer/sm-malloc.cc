@@ -46,6 +46,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "analyzer/function-set.h"
 #include "analyzer/program-state.h"
+#include "print-tree.h"
+#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -428,6 +430,7 @@ private:
   get_or_create_deallocator (tree deallocator_fndecl);
 
   void on_allocator_call (sm_context *sm_ctxt,
+	const supernode *node,
 			  const gcall *call,
 			  const deallocator_set *deallocators,
 			  bool returns_nonnull = false) const;
@@ -444,6 +447,16 @@ private:
   void on_realloc_call (sm_context *sm_ctxt,
 			const supernode *node,
 			const gcall *call) const;
+  void on_pointer_assignment(sm_context *sm_ctxt,
+			     const supernode *node,
+			     const gassign *assign_stmt,
+			     tree lhs,
+			     tree rhs) const;
+  void on_pointer_assignment(sm_context *sm_ctxt,
+			     const supernode *node,
+			     const gcall *call,
+			     tree lhs,
+			     tree rhs) const;
   void on_zero_assignment (sm_context *sm_ctxt,
 			   const gimple *stmt,
 			   tree lhs) const;
@@ -1432,6 +1445,117 @@ private:
   const char *m_funcname;
 };
 
+/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
+
+class dubious_allocation_size : public malloc_diagnostic
+{
+public:
+  dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
+			   tree size_tree, unsigned HOST_WIDE_INT size_diff)
+  : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::CONSTANT_SIZE), 
+    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(size_diff) 
+    {}
+  
+  dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
+			   tree size_tree)
+  : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::MISSING_OPERAND), 
+    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(0) 
+    {}
+
+  const char *get_kind () const final override 
+  { 
+    return "dubious_allocation_size"; 
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_allocation_size;
+  }
+
+  bool subclass_equal_p (const pending_diagnostic &base_other) const
+  final override
+  {
+    const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
+    return malloc_diagnostic::subclass_equal_p(other)
+	   && m_type == other.m_type
+	   && same_tree_p (m_lhs, other.m_lhs)
+	   && same_tree_p (m_size_tree, other.m_size_tree)
+	   && m_size_diff == other.m_size_diff;
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (131);
+    return warning_meta (rich_loc, m, get_controlling_option (),
+	       "Allocated buffer size is not a multiple of the pointee's size");
+  }
+
+  label_text describe_state_change (const evdesc::state_change &change)
+    override
+  {
+    if (change.m_old_state == m_sm.get_start_state ()
+	&& unchecked_p (change.m_new_state))
+      {
+	m_alloc_event = change.m_event_id;
+	if (m_type == dubious_allocation_type::CONSTANT_SIZE)
+	  {
+	    // TODO: verify that it's the allocation stmt, not a copy
+	    return change.formatted_print ("%E bytes allocated here", 
+					   m_size_tree);
+	  }
+      }
+    return malloc_diagnostic::describe_state_change (change);
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+    if (m_type == dubious_allocation_type::CONSTANT_SIZE)
+      {
+	if (m_alloc_event.known_p ())
+	  return ev.formatted_print (
+	    "Casting %qE to %qT leaves %wu trailing bytes; either the"
+            " allocated size is bogus or the type on the left-hand side is"
+            " wrong",
+	    m_arg, TREE_TYPE (m_lhs), m_size_diff);
+	else
+	  return ev.formatted_print (
+	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either"
+            " the allocated size is bogus or the type on the left-hand side is"
+            " wrong",
+	    m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
+      }
+    else if (m_type == dubious_allocation_type::MISSING_OPERAND)
+      {
+	if (m_alloc_event.known_p ())
+	  return ev.formatted_print (
+	    "%qE is incompatible with %qT; either the allocated size at %@ is"
+            " bogus or the type on the left-hand side is wrong",
+	    m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
+	else
+	  return ev.formatted_print (
+	    "Allocation is incompatible with %qT; either the allocated size is"
+            " bogus or the type on the left-hand side is wrong",
+	    TREE_TYPE (m_lhs));
+      }
+
+    gcc_unreachable ();
+    return label_text ();
+  }
+
+private:
+  enum dubious_allocation_type {
+    CONSTANT_SIZE,
+    MISSING_OPERAND
+  };
+
+  dubious_allocation_type m_type;
+  diagnostic_event_id_t m_alloc_event;
+  tree m_lhs;
+  tree m_size_tree;
+  unsigned HOST_WIDE_INT m_size_diff;
+};
+
 /* struct allocation_state : public state_machine::state.  */
 
 /* Implementation of state_machine::state::dump_to_pp vfunc
@@ -1633,6 +1757,160 @@ known_allocator_p (const_tree fndecl, const gcall *call)
   return false;
 }
 
+/* Returns the trailing bytes on dubious allocation sizes.  */
+
+static unsigned HOST_WIDE_INT 
+capacity_compatible_with_type (tree cst, tree pointee_size_tree)
+{
+  unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
+  if (pointee_size == 0)
+    return 0;
+  unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
+
+  return alloc_size % pointee_size;
+}
+
+/* Returns true if there is a constant tree with 
+   the same constant value inside the sval.  */
+
+static bool
+const_operand_in_sval_p (const svalue *sval, tree size_cst)
+{
+  auto_vec<const svalue *> non_mult_expr;
+  auto_vec<const svalue *> worklist;
+  worklist.safe_push(sval);
+  while (!worklist.is_empty())
+    {
+      const svalue *curr = worklist.pop ();
+      curr = curr->unwrap_any_unmergeable ();
+
+      switch (curr->get_kind())
+	{
+	default:
+	  break;
+	case svalue_kind::SK_CONSTANT:
+	  {
+	    const constant_svalue *cst_sval = curr->dyn_cast_constant_svalue ();
+      unsigned HOST_WIDE_INT sval_int
+			      = TREE_INT_CST_LOW (cst_sval->get_constant ());
+      unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (size_cst);
+	    if (sval_int % size_cst_int == 0)
+	      return true;
+	  }
+	  break;
+	case svalue_kind::SK_BINOP:
+	  {
+	    const binop_svalue *b_sval = curr->dyn_cast_binop_svalue ();
+      if (b_sval->get_op () == MULT_EXPR)
+	{
+	  worklist.safe_push (b_sval->get_arg0 ());
+	  worklist.safe_push (b_sval->get_arg1 ());
+	}
+      else
+	{
+	  non_mult_expr.safe_push (b_sval->get_arg0 ());
+	  non_mult_expr.safe_push (b_sval->get_arg1 ());
+	}
+	  }
+	  break;
+	case svalue_kind::SK_UNARYOP:
+	  {
+	    const unaryop_svalue *un_sval = curr->dyn_cast_unaryop_svalue ();
+	    worklist.safe_push (un_sval->get_arg ());
+	  }
+	  break;
+	case svalue_kind::SK_UNKNOWN:
+	  return true;
+	}
+    }
+
+  /* Each expr should be a multiple of the size. 
+     E.g. used to catch n + sizeof(int) errors.  */
+  bool reduce = !non_mult_expr.is_empty ();
+  while (!non_mult_expr.is_empty() && reduce)
+    {
+      const svalue *expr_sval = non_mult_expr.pop ();
+      reduce &= const_operand_in_sval_p (expr_sval, size_cst);
+    }
+  return reduce;
+}
+
+/* Returns true iff the type is a struct with another struct inside.  */
+
+static bool
+struct_or_union_with_inheritance_p (tree type)
+{
+  if (!RECORD_OR_UNION_TYPE_P (type))
+    return false;
+
+  for (tree f = TYPE_FIELDS (type); f; f = TREE_CHAIN (f))
+    if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (f)))
+      return true;
+
+  return false;
+}
+
+static void
+check_capacity (sm_context *sm_ctxt, 
+		const malloc_state_machine &sm,
+		const supernode *node,
+		const gimple *stmt,
+		tree lhs,
+		tree rhs,
+		const svalue *capacity)
+{
+  tree pointer_type = TREE_TYPE (lhs);
+  gcc_assert (TREE_CODE (pointer_type) == POINTER_TYPE);
+
+  tree pointee_type = TREE_TYPE (pointer_type);
+  /* void * is always compatible.  */
+  if (TREE_CODE (pointee_type) == VOID_TYPE)
+    return;
+
+  if (struct_or_union_with_inheritance_p (pointee_type))
+    return;
+
+  tree pointee_size_tree = size_in_bytes(pointee_type);
+  /* The size might be unknown e.g. being a array with n elements
+     or casting to char * never has any trailing bytes.  */
+  if (TREE_CODE (pointee_size_tree) != INTEGER_CST
+      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
+    return;
+
+  switch (capacity->get_kind ())
+    {
+    default:
+      break;
+    case svalue_kind::SK_CONSTANT:
+      {
+	const constant_svalue *cst_sval = capacity->dyn_cast_constant_svalue ();
+	tree cst = cst_sval->get_constant ();
+	unsigned HOST_WIDE_INT size_diff
+	  = capacity_compatible_with_type (cst, pointee_size_tree);
+	if (size_diff != 0)
+	  {
+	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
+	    sm_ctxt->warn (node, stmt, diag_arg, 
+			  new dubious_allocation_size (sm, lhs, diag_arg,
+						       cst, size_diff));
+	  }
+      }
+      break;
+    case svalue_kind::SK_BINOP:
+    case svalue_kind::SK_UNARYOP:
+      {
+	if (!const_operand_in_sval_p (capacity, pointee_size_tree))
+	  {
+	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
+	    sm_ctxt->warn (node, stmt, diag_arg, 
+			  new dubious_allocation_size (sm, lhs, diag_arg,
+						       pointee_size_tree));
+	  }
+      }
+      break;
+    }
+}
+
 /* Implementation of state_machine::on_stmt vfunc for malloc_state_machine.  */
 
 bool
@@ -1645,14 +1923,14 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
       {
 	if (known_allocator_p (callee_fndecl, call))
 	  {
-	    on_allocator_call (sm_ctxt, call, &m_free);
+	    on_allocator_call (sm_ctxt, node, call, &m_free);
 	    return true;
 	  }
 
 	if (is_named_call_p (callee_fndecl, "operator new", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_scalar_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_scalar_delete);
 	else if (is_named_call_p (callee_fndecl, "operator new []", call, 1))
-	  on_allocator_call (sm_ctxt, call, &m_vector_delete);
+	  on_allocator_call (sm_ctxt, node, call, &m_vector_delete);
 	else if (is_named_call_p (callee_fndecl, "operator delete", call, 1)
 		 || is_named_call_p (callee_fndecl, "operator delete", call, 2))
 	  {
@@ -1707,7 +1985,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (callee_fndecl));
 	    bool returns_nonnull
 	      = lookup_attribute ("returns_nonnull", attrs);
-	    on_allocator_call (sm_ctxt, call, deallocators, returns_nonnull);
+	    on_allocator_call (sm_ctxt, node, call, deallocators, returns_nonnull);
 	  }
 
 	/* Handle "__attribute__((nonnull))".   */
@@ -1763,11 +2041,30 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	      = mutable_this->get_or_create_deallocator (callee_fndecl);
 	    on_deallocator_call (sm_ctxt, node, call, d, dealloc_argno);
 	  }
+
+  /* Handle returns from function calls.  */ 
+	tree lhs = gimple_call_lhs (call);
+	if (lhs && TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE
+		&& TREE_CODE (gimple_call_return_type (call)) == POINTER_TYPE)
+	  on_pointer_assignment (sm_ctxt, node, call, lhs, 
+				gimple_call_fn (call));
       }
 
   if (tree lhs = sm_ctxt->is_zero_assignment (stmt))
     if (any_pointer_p (lhs))
       on_zero_assignment (sm_ctxt, stmt,lhs);
+
+  /* Handle pointer assignments/casts for dubious allocation size.  */
+  if (const gassign *assign_stmt = dyn_cast <const gassign *> (stmt)) 
+    {
+      if (gimple_num_ops (stmt) == 2) 
+	{
+	  tree lhs = gimple_assign_lhs (assign_stmt);
+	  tree rhs = gimple_assign_rhs1 (assign_stmt);
+	  if (any_pointer_p (lhs) && any_pointer_p (rhs))
+	      on_pointer_assignment (sm_ctxt, node, assign_stmt, lhs, rhs);
+	}
+    }
 
   /* Handle dereferences.  */
   for (unsigned i = 0; i < gimple_num_ops (stmt); i++)
@@ -1818,6 +2115,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 
 void
 malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
+					 const supernode *node,
 					 const gcall *call,
 					 const deallocator_set *deallocators,
 					 bool returns_nonnull) const
@@ -1830,6 +2128,9 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				 (returns_nonnull
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
+      
+      if (TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE)
+	on_pointer_assignment (sm_ctxt, node, call, lhs, gimple_call_fn (call));
     }
   else
     {
@@ -1965,6 +2266,60 @@ malloc_state_machine::on_realloc_call (sm_context *sm_ctxt,
       handle_free_of_non_heap (sm_ctxt, node, call, arg, d);
       if (path_context *path_ctxt = sm_ctxt->get_path_context ())
 	path_ctxt->terminate_path ();
+    }
+}
+
+/* Handle assignments between two pointers.
+   Check for dubious allocation sizes.
+*/
+
+void
+malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
+		      const supernode *node,
+		      const gassign *assign_stmt,
+		      tree lhs,
+		      tree rhs) const
+{
+  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
+      warnings on assignments after the cast.  */
+  if (pending_diagnostic::same_tree_p (TREE_TYPE (lhs), TREE_TYPE (rhs)))
+    return;
+
+  const program_state *state = sm_ctxt->get_old_program_state ();
+  const svalue *r_value = state->m_region_model->get_rvalue (rhs, NULL);
+  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
+    {
+      const svalue *capacity = state->m_region_model->get_capacity 
+	    (reg->get_pointee ());
+      check_capacity(sm_ctxt, *this, node, assign_stmt, lhs, rhs, capacity);
+    }
+}
+
+void
+malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
+		      const supernode *node,
+		      const gcall *call,
+		      tree lhs,
+		      tree fn_decl) const
+{
+  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
+      warnings on assignments after the cast.  */
+  if (pending_diagnostic::same_tree_p 
+	(TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
+    return;
+
+  const program_state *state = sm_ctxt->get_new_program_state ();
+  const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
+  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
+    {
+      const svalue *capacity = state->m_region_model->get_capacity 
+	    (reg->get_pointee ());
+      check_capacity (sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
+    }
+  else if (const conjured_svalue *con
+	     = dyn_cast <const conjured_svalue *> (r_value))
+    {
+      // FIXME: How to get a region_svalue? 
     }
 }
 

@@ -89,8 +89,11 @@ struct s
 static struct s * __attribute__((noinline))
 alloc_s (size_t num)
 {
-  struct s *p = malloc (sizeof(struct s) + num);
+  struct s *p = malloc (sizeof(struct s) + num); /* { dg-line malloc } */
   return p;
+
+  /* { dg-warning "" "" { target *-*-* } malloc } */
+  /* { dg-message "" "" { target *-*-* } malloc } */
 }
 
 struct s *

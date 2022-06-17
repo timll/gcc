@@ -1,9 +1,9 @@
-/* { dg-additional-options "-Wno-incompatible-pointer-types" } */
+/* { dg-additional-options "-Wno-incompatible-pointer-types -Wno-analyzer-allocation-size" } */
 
 #include <stdlib.h>
 
-struct foo;
-struct bar;
+struct foo {};
+struct bar {};
 void *hv (struct foo **tm)
 {
   void *p = __builtin_malloc (4);

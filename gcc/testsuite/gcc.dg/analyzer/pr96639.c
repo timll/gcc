@@ -1,3 +1,5 @@
+/* { dg-additional-options -Wno-analyzer-allocation-size } */
+
 void *calloc (__SIZE_TYPE__, __SIZE_TYPE__);
 
 int

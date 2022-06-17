@@ -1,7 +1,9 @@
+/* { dg-additional-options -Wno-analyzer-allocation-size } */
 /* Adapted from gcc.dg/Wmismatched-dealloc.c.  */
 
 #define A(...) __attribute__ ((malloc (__VA_ARGS__)))
 
+struct FILE {};
 typedef struct FILE   FILE;
 typedef __SIZE_TYPE__ size_t;
 
