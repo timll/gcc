@@ -1445,7 +1445,7 @@ private:
   const char *m_funcname;
 };
 
-/* Concrete subclass for casts of pointers that lead to trailing bytes  */
+/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
 
 class dubious_allocation_size : public malloc_diagnostic
 {
@@ -1453,14 +1453,19 @@ public:
   dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
 			   tree size_tree, unsigned HOST_WIDE_INT size_diff)
   : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::CONSTANT_SIZE), 
-    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(size_diff) {}
+    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(size_diff) 
+    {}
   
   dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
 			   tree size_tree)
   : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::MISSING_OPERAND), 
-    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(0) {}
+    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(0) 
+    {}
 
-  const char *get_kind () const final override { return "dubious_allocation_size"; }
+  const char *get_kind () const final override 
+  { 
+    return "dubious_allocation_size"; 
+  }
 
   int get_controlling_option () const final override
   {
@@ -1483,7 +1488,7 @@ public:
     diagnostic_metadata m;
     m.add_cwe (131);
     return warning_meta (rich_loc, m, get_controlling_option (),
-		    "Allocated buffer size is not a multiple of the pointee's size");
+	       "Allocated buffer size is not a multiple of the pointee's size");
   }
 
   label_text describe_state_change (const evdesc::state_change &change)
@@ -1510,27 +1515,27 @@ public:
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
 	    "Casting %qE to %qT leaves %wu trailing bytes; either the"
-      " allocated size is bogus or the type on the left-hand side is"
-      " wrong",
+            " allocated size is bogus or the type on the left-hand side is"
+            " wrong",
 	    m_arg, TREE_TYPE (m_lhs), m_size_diff);
 	else
 	  return ev.formatted_print (
-	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either the"
-      " allocated size is bogus or the type on the left-hand side is"
-      " wrong",
+	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either"
+            " the allocated size is bogus or the type on the left-hand side is"
+            " wrong",
 	    m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
       }
     else if (m_type == dubious_allocation_type::MISSING_OPERAND)
       {
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
-	    "%qE is incompatible with %qT; either the allocated size at %@ is bogus"
-      " or the type on the left-hand side is wrong",
+	    "%qE is incompatible with %qT; either the allocated size at %@ is"
+            " bogus or the type on the left-hand side is wrong",
 	    m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
 	else
 	  return ev.formatted_print (
-	    "Allocation is incompatible with %qT; either the allocated size is bogus"
-      " or the type on the left-hand side is wrong",
+	    "Allocation is incompatible with %qT; either the allocated size is"
+            " bogus or the type on the left-hand side is wrong",
 	    TREE_TYPE (m_lhs));
       }
 
@@ -1774,7 +1779,7 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
   auto_vec<const svalue *> non_mult_expr;
   auto_vec<const svalue *> worklist;
   worklist.safe_push(sval);
-  while (!worklist.is_empty()) 
+  while (!worklist.is_empty())
     {
       const svalue *curr = worklist.pop ();
       curr = curr->unwrap_any_unmergeable ();
@@ -1858,7 +1863,7 @@ check_capacity (sm_context *sm_ctxt,
   gcc_assert (TREE_CODE (pointer_type) == POINTER_TYPE);
 
   tree pointee_type = TREE_TYPE (pointer_type);
-  /* void * is always compatible */
+  /* void * is always compatible.  */
   if (TREE_CODE (pointee_type) == VOID_TYPE)
     return;
 
@@ -1867,7 +1872,7 @@ check_capacity (sm_context *sm_ctxt,
 
   tree pointee_size_tree = size_in_bytes(pointee_type);
   /* The size might be unknown e.g. being a array with n elements
-     or casting to char * never has any trailing bytes */
+     or casting to char * never has any trailing bytes.  */
   if (TREE_CODE (pointee_size_tree) != INTEGER_CST
       || TREE_INT_CST_LOW (pointee_size_tree) == 1)
     return;
@@ -2037,7 +2042,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    on_deallocator_call (sm_ctxt, node, call, d, dealloc_argno);
 	  }
 
-  /* Handle returns from function calls */ 
+  /* Handle returns from function calls.  */ 
 	tree lhs = gimple_call_lhs (call);
 	if (lhs && TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE
 		&& TREE_CODE (gimple_call_return_type (call)) == POINTER_TYPE)
@@ -2276,7 +2281,7 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 		      tree rhs) const
 {
   /* Do not warn if lhs and rhs are of the same type to not emit duplicate
-      warnings on assignments after the cast. */
+      warnings on assignments after the cast.  */
   if (pending_diagnostic::same_tree_p (TREE_TYPE (lhs), TREE_TYPE (rhs)))
     return;
 
@@ -2298,7 +2303,7 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 		      tree fn_decl) const
 {
   /* Do not warn if lhs and rhs are of the same type to not emit duplicate
-      warnings on assignments after the cast. */
+      warnings on assignments after the cast.  */
   if (pending_diagnostic::same_tree_p 
 	(TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
     return;
@@ -2311,7 +2316,8 @@ malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
 	    (reg->get_pointee ());
       check_capacity (sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
     }
-  else if (const conjured_svalue *con = dyn_cast <const conjured_svalue *> (r_value))
+  else if (const conjured_svalue *con
+	     = dyn_cast <const conjured_svalue *> (r_value))
     {
       // FIXME: How to get a region_svalue? 
     }
