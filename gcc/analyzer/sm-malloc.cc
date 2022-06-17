@@ -1830,6 +1830,21 @@ const_operand_in_sval_p (const svalue *sval, tree size_cst)
   return reduce;
 }
 
+/* Returns true iff the type is a struct with another struct inside.  */
+
+static bool
+struct_or_union_with_inheritance_p (tree type)
+{
+  if (!RECORD_OR_UNION_TYPE_P (type))
+    return false;
+
+  for (tree f = TYPE_FIELDS (type); f; f = TREE_CHAIN (f))
+    if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (f)))
+      return true;
+
+  return false;
+}
+
 static void
 check_capacity (sm_context *sm_ctxt, 
 		const malloc_state_machine &sm,
@@ -1845,6 +1860,9 @@ check_capacity (sm_context *sm_ctxt,
   tree pointee_type = TREE_TYPE (pointer_type);
   /* void * is always compatible */
   if (TREE_CODE (pointee_type) == VOID_TYPE)
+    return;
+
+  if (struct_or_union_with_inheritance_p (pointee_type))
     return;
 
   tree pointee_size_tree = size_in_bytes(pointee_type);
