@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+/* Flow warnings */
+
 void *create_buffer(int n)
 {
   return malloc(n);
@@ -8,6 +10,7 @@ void *create_buffer(int n)
 
 void test_1(void) 
 {
+  // FIXME
   int *buf = create_buffer(42); /* { dg-warning "" "" { xfail *-*-* } } */
   free (buf);
 }

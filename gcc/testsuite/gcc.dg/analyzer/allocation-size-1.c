@@ -33,3 +33,22 @@ void test_4 (void)
   /* { dg-warning "Allocated buffer size is not a multiple of the pointee's size" "" { target *-*-* } assign } */
   /* { dg-message "\\(2\\) Casting 'ptr' to 'int \\*' leaves 2 trailing bytes" "" { target *-*-* } assign } */
 }
+
+struct s {
+  int i;
+};
+
+void test_5 (void)
+{
+  struct s *ptr = malloc (5 * sizeof (struct s));
+  free (ptr);
+}
+
+void test_6 (void)
+{
+  long *ptr = malloc (5 * sizeof (struct s));  /* { dg-line malloc6 } */
+  free (ptr);
+
+  /* { dg-warning "" "" { target *-*-* } malloc6 } */
+  /* { dg-message "" "" { target *-*-* } malloc6 } */
+}

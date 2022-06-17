@@ -30,9 +30,19 @@ void test_3(void)
 {
   int n;
   scanf("%i", &n);
-  int *ptr = malloc (n + sizeof(int)); /* { dg-line malloc3 } */
+  int *ptr = malloc (n + sizeof (int)); /* { dg-line malloc3 } */
   free (ptr);
 
   /* { dg-warning "" "" { target *-*-* } malloc3 } */
   /* { dg-message "" "" { target *-*-* } malloc3 } */
+}
+
+void test_4(void)
+{
+  int n;
+  scanf("%i", &n);
+  int m;
+  scanf("%i", &m);
+  int *ptr = malloc ((n + m) * sizeof (int));
+  free (ptr);
 }
