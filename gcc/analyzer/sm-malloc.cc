@@ -1816,7 +1816,7 @@ public:
     result_set.add (sval);
   }
   
-  virtual void visit_unaryop_svalue (const unaryop_svalue *sval) 
+  void visit_unaryop_svalue (const unaryop_svalue *sval) 
   {
     const svalue *arg = sval->get_arg ();
     arg->accept (this);
@@ -1845,7 +1845,7 @@ public:
       }
   }
 
-  virtual void visit_repeated_svalue (const repeated_svalue *sval) 
+  void visit_repeated_svalue (const repeated_svalue *sval) 
   {
     sval->get_inner_svalue ()->accept(this);
     if (result_set.contains (sval->get_inner_svalue ()))
