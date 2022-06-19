@@ -73,6 +73,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "ssa-iterators.h"
 #include "calls.h"
+#include "print-tree.h"
+#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -651,6 +653,107 @@ private:
   const gassign *m_assign;
   int m_operand_precision;
   tree m_count_cst;
+};
+
+
+/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
+
+class dubious_allocation_size 
+: public pending_diagnostic
+{
+public:
+  dubious_allocation_size (const region_svalue *rhs, tree size_tree) : m_rhs(rhs), m_size_tree(size_tree)
+    {}
+  
+  // dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
+	// 		   tree size_tree)
+  // : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::MISSING_OPERAND), 
+  //   m_lhs(lhs), m_size_tree(size_tree), m_size_diff(0) 
+  //   {}
+
+  const char *get_kind () const final override 
+  { 
+    return "dubious_allocation_size"; 
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_allocation_size;
+  }
+
+  bool subclass_equal_p (const pending_diagnostic &base_other) const
+  final override
+  {
+    const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
+    return same_tree_p (m_size_tree, other.m_size_tree);
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (131);
+    if (const region *reg = m_rhs->maybe_get_region ())
+      {
+        if (tree decl = reg->maybe_get_decl ())
+          inform (UNKNOWN_LOCATION, "%qE", decl);
+      }
+    return warning_meta (rich_loc, m, get_controlling_option (),
+	       "Allocated buffer size is not a multiple of the pointee's size");
+  }
+
+  label_text describe_state_change (const evdesc::state_change &change)
+    override
+  {
+    return label_text ();
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+  //   if (m_type == dubious_allocation_type::CONSTANT_SIZE)
+  //     {
+	// if (m_alloc_event.known_p ())
+	//   return ev.formatted_print (
+	//     "Casting %qE to %qT leaves %wu trailing bytes; either the"
+  //           " allocated size is bogus or the type on the left-hand side is"
+  //           " wrong",
+	//     m_arg, TREE_TYPE (m_lhs), m_size_diff);
+	// else
+	//   return ev.formatted_print (
+	//     "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either"
+  //           " the allocated size is bogus or the type on the left-hand side is"
+  //           " wrong",
+	//     m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
+  //     }
+  //   else if (m_type == dubious_allocation_type::MISSING_OPERAND)
+  //     {
+	// if (m_alloc_event.known_p ())
+	//   return ev.formatted_print (
+	//     "%qE is incompatible with %qT; either the allocated size at %@ is"
+  //           " bogus or the type on the left-hand side is wrong",
+	//     m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
+	// else
+	//   return ev.formatted_print (
+	//     "Allocation is incompatible with %qT; either the allocated size is"
+  //           " bogus or the type on the left-hand side is wrong",
+	//     TREE_TYPE (m_lhs));
+  //     }
+
+  //   gcc_unreachable ();
+    return label_text ();
+  }
+
+private:
+  enum dubious_allocation_type {
+    CONSTANT_SIZE,
+    MISSING_OPERAND
+  };
+
+  dubious_allocation_type m_type;
+  diagnostic_event_id_t m_alloc_event;
+  tree m_lhs;
+  const region_svalue *m_rhs;
+  tree m_size_tree;
+  unsigned HOST_WIDE_INT m_size_diff;
 };
 
 /* If ASSIGN is a stmt that can be modelled via
@@ -2799,6 +2902,154 @@ region_model::check_region_for_read (const region *src_reg,
   check_region_access (src_reg, DIR_READ, ctxt);
 }
 
+/* Returns the trailing bytes on dubious allocation sizes.  */
+
+static unsigned HOST_WIDE_INT 
+capacity_compatible_with_type (tree cst, tree pointee_size_tree)
+{
+  unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
+  if (pointee_size == 0)
+    return 0;
+  unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
+
+  return alloc_size % pointee_size;
+}
+
+/* Returns true if there is a constant tree with 
+   the same constant value inside the sval.  */
+
+static bool
+const_operand_in_sval_p (const svalue *sval, tree size_cst)
+{
+  auto_vec<const svalue *> non_mult_expr;
+  auto_vec<const svalue *> worklist;
+  worklist.safe_push(sval);
+  while (!worklist.is_empty())
+    {
+      const svalue *curr = worklist.pop ();
+      curr = curr->unwrap_any_unmergeable ();
+
+      switch (curr->get_kind())
+	{
+	default:
+	  break;
+	case svalue_kind::SK_CONSTANT:
+	  {
+	    const constant_svalue *cst_sval = curr->dyn_cast_constant_svalue ();
+      unsigned HOST_WIDE_INT sval_int
+			      = TREE_INT_CST_LOW (cst_sval->get_constant ());
+      unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (size_cst);
+	    if (sval_int % size_cst_int == 0)
+	      return true;
+	  }
+	  break;
+	case svalue_kind::SK_BINOP:
+	  {
+	    const binop_svalue *b_sval = curr->dyn_cast_binop_svalue ();
+      if (b_sval->get_op () == MULT_EXPR)
+	{
+	  worklist.safe_push (b_sval->get_arg0 ());
+	  worklist.safe_push (b_sval->get_arg1 ());
+	}
+      else
+	{
+	  non_mult_expr.safe_push (b_sval->get_arg0 ());
+	  non_mult_expr.safe_push (b_sval->get_arg1 ());
+	}
+	  }
+	  break;
+	case svalue_kind::SK_UNARYOP:
+	  {
+	    const unaryop_svalue *un_sval = curr->dyn_cast_unaryop_svalue ();
+	    worklist.safe_push (un_sval->get_arg ());
+	  }
+	  break;
+	case svalue_kind::SK_UNKNOWN:
+	  return true;
+	}
+    }
+
+  /* Each expr should be a multiple of the size. 
+     E.g. used to catch n + sizeof(int) errors.  */
+  bool reduce = !non_mult_expr.is_empty ();
+  while (!non_mult_expr.is_empty() && reduce)
+    {
+      const svalue *expr_sval = non_mult_expr.pop ();
+      reduce &= const_operand_in_sval_p (expr_sval, size_cst);
+    }
+  return reduce;
+}
+
+/* Returns true if the the type is a struct and the 
+   first field inside the struct is also an struct.  */
+
+static bool
+struct_or_union_with_inheritance_p (tree maybe_struct)
+{
+  return RECORD_OR_UNION_TYPE_P (maybe_struct) 
+         && RECORD_OR_UNION_TYPE_P (TREE_TYPE (TYPE_FIELDS (maybe_struct)));
+}
+
+static void
+check_capacity (const region *lhs_reg,
+                const region_svalue *rhs,
+                const svalue *capacity,
+                region_model_context *ctxt)
+{
+  if (!ctxt)
+    return;
+
+  tree pointer_type = lhs_reg->get_type ();
+  gcc_assert (POINTER_TYPE_P (pointer_type));
+
+  tree pointee_type = TREE_TYPE (pointer_type);
+  /* void * is always compatible.  */
+  if (TREE_CODE (pointee_type) == VOID_TYPE)
+    return;
+
+  if (struct_or_union_with_inheritance_p (pointee_type))
+    return;
+
+  tree pointee_size_tree = size_in_bytes(pointee_type);
+  /* The size might be unknown e.g. being a array with n elements
+     or casting to char * never has any trailing bytes.  */
+  if (TREE_CODE (pointee_size_tree) != INTEGER_CST
+      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
+    return;
+
+  // capacity->dump();
+  switch (capacity->get_kind ())
+    {
+    default:
+      break;
+    case svalue_kind::SK_CONSTANT:
+      {
+	const constant_svalue *cst_sval = capacity->dyn_cast_constant_svalue ();
+	tree cst = cst_sval->get_constant ();
+	unsigned HOST_WIDE_INT size_diff
+	  = capacity_compatible_with_type (cst, pointee_size_tree);
+	if (size_diff != 0)
+	  {
+	    // tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
+	    // sm_ctxt->warn (node, stmt, diag_arg, 
+			ctxt->warn (new dubious_allocation_size (rhs, pointee_size_tree));
+	  }
+      }
+      break;
+    case svalue_kind::SK_BINOP:
+    case svalue_kind::SK_UNARYOP:
+      {
+	if (!const_operand_in_sval_p (capacity, pointee_size_tree))
+	  {
+	    // tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
+	    // sm_ctxt->warn (node, stmt, diag_arg, 
+			ctxt->warn (new dubious_allocation_size (rhs, pointee_size_tree));
+	  }
+      }
+      break;
+    }
+}
+
 /* Set the value of the region given by LHS_REG to the value given
    by RHS_SVAL.
    Use CTXT to report any warnings associated with writing to LHS_REG.  */
@@ -2811,6 +3062,16 @@ region_model::set_value (const region *lhs_reg, const svalue *rhs_sval,
   gcc_assert (rhs_sval);
 
   check_region_for_write (lhs_reg, ctxt);
+
+  // XXX
+  if (POINTER_TYPE_P (lhs_reg->get_type ()))
+    {
+      if (const region_svalue *reg = dyn_cast <const region_svalue *> (rhs_sval))
+        {
+          const svalue *capacity = get_capacity (reg->get_pointee ());
+          check_capacity (lhs_reg, reg, capacity, ctxt);
+        }
+    }
 
   m_store.set_value (m_mgr->get_store_manager(), lhs_reg, rhs_sval,
 		     ctxt ? ctxt->get_uncertainty () : NULL);
@@ -2825,6 +3086,17 @@ region_model::set_value (tree lhs, tree rhs, region_model_context *ctxt)
   const svalue *rhs_sval = get_rvalue (rhs, ctxt);
   gcc_assert (lhs_reg);
   gcc_assert (rhs_sval);
+
+  // XXX
+  if (POINTER_TYPE_P (lhs_reg->get_type ()))
+    {
+      if (const region_svalue *reg = dyn_cast <const region_svalue *> (rhs_sval))
+        {
+          const svalue *capacity = get_capacity (reg->get_pointee ());
+          check_capacity (lhs_reg, reg, capacity, ctxt);
+        }
+    }
+
   set_value (lhs_reg, rhs_sval, ctxt);
 }
 

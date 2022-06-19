@@ -3,7 +3,7 @@
 
 #define A(...) __attribute__ ((malloc (__VA_ARGS__)))
 
-struct FILE {};
+// struct FILE {};
 typedef struct FILE   FILE;
 typedef __SIZE_TYPE__ size_t;
 
