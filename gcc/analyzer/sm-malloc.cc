@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/program-point.h"
 #include "analyzer/store.h"
 #include "analyzer/region-model.h"
+#include "analyzer/constraint-manager.h"
 #include "stringpool.h"
 #include "attribs.h"
 #include "analyzer/function-set.h"
@@ -1515,14 +1516,14 @@ public:
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
 	    "Casting %qE to %qT leaves %wu trailing bytes; either the"
-            " allocated size is bogus or the type on the left-hand side is"
-            " wrong",
+	    " allocated size is bogus or the type on the left-hand side is"
+	    " wrong",
 	    m_arg, TREE_TYPE (m_lhs), m_size_diff);
 	else
 	  return ev.formatted_print (
 	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either"
-            " the allocated size is bogus or the type on the left-hand side is"
-            " wrong",
+	    " the allocated size is bogus or the type on the left-hand side is"
+	    " wrong",
 	    m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
       }
     else if (m_type == dubious_allocation_type::MISSING_OPERAND)
@@ -1530,12 +1531,12 @@ public:
 	if (m_alloc_event.known_p ())
 	  return ev.formatted_print (
 	    "%qE is incompatible with %qT; either the allocated size at %@ is"
-            " bogus or the type on the left-hand side is wrong",
+	    " bogus or the type on the left-hand side is wrong",
 	    m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
 	else
 	  return ev.formatted_print (
 	    "Allocation is incompatible with %qT; either the allocated size is"
-            " bogus or the type on the left-hand side is wrong",
+	    " bogus or the type on the left-hand side is wrong",
 	    TREE_TYPE (m_lhs));
       }
 
@@ -1770,83 +1771,161 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree)
   return alloc_size % pointee_size;
 }
 
+/* Visits svalues and checks whether the 
+   size_cst is a operand of the svalue.  */
+
+class size_visitor : public visitor
+{
+public:
+  size_visitor(sm_context *ctxt, tree size_cst, const svalue *sval) 
+  : m_sm_ctxt(ctxt), m_size_cst(size_cst), m_sval(sval)
+  {
+    sval->accept(this);
+  }
+
+  bool get_result()
+  {
+    /* The result_set gradually builts from atomtic nodes upwards. If a node is
+       in the result_set, itself or one/all of its children have an operand that
+       is a multiple of the size_cst. If the root is inside, the given sval 
+       is valid aka a multiple of the size_cst.*/
+    return result_set.contains(m_sval);
+  }
+
+  void 
+  visit_constant_svalue (const constant_svalue *sval) final override
+  {
+    unsigned HOST_WIDE_INT sval_int
+	  = TREE_INT_CST_LOW (sval->get_constant ());
+    unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (m_size_cst);
+    if (size_cst_int == 0 || sval_int % size_cst_int == 0)
+      result_set.add (sval);
+  }
+
+  void 
+  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    result_set.add (sval);
+  }
+
+  void 
+  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    result_set.add (sval);
+  }
+  
+  virtual void visit_unaryop_svalue (const unaryop_svalue *sval) 
+  {
+    const svalue *arg = sval->get_arg ();
+    arg->accept (this);
+    if (result_set.contains (arg))
+	result_set.add (sval);
+  }
+
+  void visit_binop_svalue (const binop_svalue *sval) final override
+  {
+    const svalue *arg0 = sval->get_arg0 ();
+    const svalue *arg1 = sval->get_arg1 ();
+
+
+    arg0->accept (this);
+    arg1->accept (this);
+    if (sval->get_op () == MULT_EXPR)
+      {
+	
+	if (result_set.contains (arg0) || result_set.contains (arg1))
+	  result_set.add (sval);
+      }
+    else
+      {
+	if (result_set.contains (arg0) && result_set.contains (arg1))
+	  result_set.add (sval);
+      }
+  }
+
+  virtual void visit_repeated_svalue (const repeated_svalue *sval) 
+  {
+    sval->get_inner_svalue ()->accept(this);
+    if (result_set.contains (sval->get_inner_svalue ()))
+      result_set.add (sval);
+  }
+
+  void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
+  {
+    sval->get_arg ()->accept (this);
+    if (result_set.contains (sval->get_arg ()))
+      result_set.add (sval);
+  }
+
+  void visit_widening_svalue (const widening_svalue *sval) final override
+  {
+    const svalue *base = sval->get_base_svalue ();
+    const svalue *iter = sval->get_iter_svalue ();
+
+    if (result_set.contains (base) && result_set.contains (iter))
+      result_set.add (sval);
+  }
+
+  void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    region_model *model = m_sm_ctxt->get_old_program_state ()->m_region_model;
+    constraint_manager *cm = model->get_constraints ();
+    if (cm->get_equiv_class_by_svalue (sval, NULL))
+      result_set.add (sval);
+  }
+
+  void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    // TODO: Should we do something else than assume it could be correct
+    result_set.add (sval);
+  }
+
+  void visit_const_fn_result_svalue (const const_fn_result_svalue 
+				      *sval ATTRIBUTE_UNUSED) final override
+  {
+    // TODO: Should we do something else than assume it could be correct
+    result_set.add (sval);
+  }
+
+private:
+  sm_context *m_sm_ctxt;
+  tree m_size_cst;
+  const svalue *m_sval;
+  svalue_set result_set; /* Used as a mapping of svalue*->bool.  */
+};
+
 /* Returns true if there is a constant tree with 
    the same constant value inside the sval.  */
 
 static bool
-const_operand_in_sval_p (const svalue *sval, tree size_cst)
+const_operand_in_sval_p (sm_context *sm_ctxt, tree type_size_cst, const svalue *sval)
 {
-  auto_vec<const svalue *> non_mult_expr;
-  auto_vec<const svalue *> worklist;
-  worklist.safe_push(sval);
-  while (!worklist.is_empty())
-    {
-      const svalue *curr = worklist.pop ();
-      curr = curr->unwrap_any_unmergeable ();
-
-      switch (curr->get_kind())
-	{
-	default:
-	  break;
-	case svalue_kind::SK_CONSTANT:
-	  {
-	    const constant_svalue *cst_sval = curr->dyn_cast_constant_svalue ();
-      unsigned HOST_WIDE_INT sval_int
-			      = TREE_INT_CST_LOW (cst_sval->get_constant ());
-      unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (size_cst);
-	    if (sval_int % size_cst_int == 0)
-	      return true;
-	  }
-	  break;
-	case svalue_kind::SK_BINOP:
-	  {
-	    const binop_svalue *b_sval = curr->dyn_cast_binop_svalue ();
-      if (b_sval->get_op () == MULT_EXPR)
-	{
-	  worklist.safe_push (b_sval->get_arg0 ());
-	  worklist.safe_push (b_sval->get_arg1 ());
-	}
-      else
-	{
-	  non_mult_expr.safe_push (b_sval->get_arg0 ());
-	  non_mult_expr.safe_push (b_sval->get_arg1 ());
-	}
-	  }
-	  break;
-	case svalue_kind::SK_UNARYOP:
-	  {
-	    const unaryop_svalue *un_sval = curr->dyn_cast_unaryop_svalue ();
-	    worklist.safe_push (un_sval->get_arg ());
-	  }
-	  break;
-	case svalue_kind::SK_UNKNOWN:
-	  return true;
-	}
-    }
-
-  /* Each expr should be a multiple of the size. 
-     E.g. used to catch n + sizeof(int) errors.  */
-  bool reduce = !non_mult_expr.is_empty ();
-  while (!non_mult_expr.is_empty() && reduce)
-    {
-      const svalue *expr_sval = non_mult_expr.pop ();
-      reduce &= const_operand_in_sval_p (expr_sval, size_cst);
-    }
-  return reduce;
+  size_visitor v(sm_ctxt, type_size_cst, sval);
+  // sval->accept(&v);
+  return v.get_result ();
 }
 
-/* Returns true iff the type is a struct with another struct inside.  */
+/* Special handling for structs with "inheritance" or that hold an unbounded 
+     type. Those will be skipped to prevent false positives.  */
 
 static bool
-struct_or_union_with_inheritance_p (tree type)
+struct_or_union_with_inheritance_p (tree maybe_struct)
 {
-  if (!RECORD_OR_UNION_TYPE_P (type))
-    return false;
-
-  for (tree f = TYPE_FIELDS (type); f; f = TREE_CHAIN (f))
-    if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (f)))
-      return true;
-
+  if (RECORD_OR_UNION_TYPE_P (maybe_struct))
+    {
+      for (tree iter = TYPE_FIELDS (maybe_struct); iter != NULL_TREE; 
+    iter = DECL_CHAIN (iter))
+	{
+	  tree t = TREE_TYPE (iter);
+	  if (RECORD_OR_UNION_TYPE_P (t) 
+	      || COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (t))
+	    return true;
+	}
+    }
   return false;
 }
 
@@ -1860,11 +1939,11 @@ check_capacity (sm_context *sm_ctxt,
 		const svalue *capacity)
 {
   tree pointer_type = TREE_TYPE (lhs);
-  gcc_assert (TREE_CODE (pointer_type) == POINTER_TYPE);
+  gcc_assert (POINTER_TYPE_P (pointer_type));
 
   tree pointee_type = TREE_TYPE (pointer_type);
   /* void * is always compatible.  */
-  if (TREE_CODE (pointee_type) == VOID_TYPE)
+  if (VOID_TYPE_P (pointee_type))
     return;
 
   if (struct_or_union_with_inheritance_p (pointee_type))
@@ -1879,8 +1958,6 @@ check_capacity (sm_context *sm_ctxt,
 
   switch (capacity->get_kind ())
     {
-    default:
-      break;
     case svalue_kind::SK_CONSTANT:
       {
 	const constant_svalue *cst_sval = capacity->dyn_cast_constant_svalue ();
@@ -1896,10 +1973,9 @@ check_capacity (sm_context *sm_ctxt,
 	  }
       }
       break;
-    case svalue_kind::SK_BINOP:
-    case svalue_kind::SK_UNARYOP:
+    default:
       {
-	if (!const_operand_in_sval_p (capacity, pointee_size_tree))
+	if (!const_operand_in_sval_p (sm_ctxt, pointee_size_tree, capacity))
 	  {
 	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
 	    sm_ctxt->warn (node, stmt, diag_arg, 
