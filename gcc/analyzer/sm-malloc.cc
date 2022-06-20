@@ -1917,14 +1917,20 @@ struct_or_union_with_inheritance_p (tree maybe_struct)
 {
   if (RECORD_OR_UNION_TYPE_P (maybe_struct))
     {
-      for (tree iter = TYPE_FIELDS (maybe_struct); iter != NULL_TREE; 
-    iter = DECL_CHAIN (iter))
-	{
-	  tree t = TREE_TYPE (iter);
-	  if (RECORD_OR_UNION_TYPE_P (t) 
-	      || COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (t))
-	    return true;
-	}
+      tree iter = TYPE_FIELDS (maybe_struct);
+      if (iter != NULL_TREE && RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
+        return true;
+
+      tree last_field;
+      while (iter != NULL_TREE)
+        {
+          last_field = iter;
+          iter = DECL_CHAIN (iter);
+        }
+
+      if (last_field != NULL_TREE 
+          && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
+        return true;
     }
   return false;
 }
