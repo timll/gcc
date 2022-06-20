@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /* Flow warnings */
 
@@ -36,4 +37,56 @@ void test_3(void)
 
   /* { dg-warning "" "" { target *-*-* } assign3 } */
   /* { dg-message "" "" { target *-*-* } assign3 } */
+}
+
+void test_4(void)
+{
+  int n;
+  scanf("%i", &n);
+
+  int size;
+  if (n == 0)
+    size = 1;
+  else if (n == 1)
+    size = 10;
+  else
+    size = 20;
+
+  int *buf = malloc(size); // Size should be 'unknown' at this point
+  free (buf);
+}
+
+void test_5(void)
+{
+  int n;
+  scanf("%i", &n);
+
+  int size;
+  if (n == 0)
+    size = 2;
+  else
+    size = 10;
+
+  short *buf = malloc(size); // Size should be widened to 2 and 10, both fit
+  free (buf);
+}
+
+
+void test_6(void)
+{
+  int n;
+  scanf("%i", &n);
+
+  int size;
+  if (n == 0)
+    size = 1;
+  else
+    size = 10;
+
+  short *buf = malloc(size); /* { dg-line malloc6 } */
+  free (buf);
+  
+
+  /* { dg-warning "" "" { target *-*-* } malloc6 } */
+  /* { dg-message "" "" { target *-*-* } malloc6 } */
 }

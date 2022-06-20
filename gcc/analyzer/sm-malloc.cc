@@ -1829,12 +1829,10 @@ public:
     const svalue *arg0 = sval->get_arg0 ();
     const svalue *arg1 = sval->get_arg1 ();
 
-
     arg0->accept (this);
     arg1->accept (this);
     if (sval->get_op () == MULT_EXPR)
       {
-	
 	if (result_set.contains (arg0) || result_set.contains (arg1))
 	  result_set.add (sval);
       }
@@ -1864,6 +1862,8 @@ public:
     const svalue *base = sval->get_base_svalue ();
     const svalue *iter = sval->get_iter_svalue ();
 
+    base->accept(this);
+    iter->accept(this);
     if (result_set.contains (base) && result_set.contains (iter))
       result_set.add (sval);
   }

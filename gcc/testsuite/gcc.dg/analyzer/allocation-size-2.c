@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* Tests with symbolic buffer sizes */
+/* Tests with symbolic buffer sizes.  */
 
 void test_1 (void)
 {
