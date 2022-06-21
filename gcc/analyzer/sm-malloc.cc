@@ -431,7 +431,6 @@ private:
   get_or_create_deallocator (tree deallocator_fndecl);
 
   void on_allocator_call (sm_context *sm_ctxt,
-	const supernode *node,
 			  const gcall *call,
 			  const deallocator_set *deallocators,
 			  bool returns_nonnull = false) const;
@@ -448,16 +447,6 @@ private:
   void on_realloc_call (sm_context *sm_ctxt,
 			const supernode *node,
 			const gcall *call) const;
-  void on_pointer_assignment(sm_context *sm_ctxt,
-			     const supernode *node,
-			     const gassign *assign_stmt,
-			     tree lhs,
-			     tree rhs) const;
-  void on_pointer_assignment(sm_context *sm_ctxt,
-			     const supernode *node,
-			     const gcall *call,
-			     tree lhs,
-			     tree rhs) const;
   void on_zero_assignment (sm_context *sm_ctxt,
 			   const gimple *stmt,
 			   tree lhs) const;
@@ -1758,241 +1747,6 @@ known_allocator_p (const_tree fndecl, const gcall *call)
   return false;
 }
 
-/* Returns the trailing bytes on dubious allocation sizes.  */
-
-static unsigned HOST_WIDE_INT 
-capacity_compatible_with_type (tree cst, tree pointee_size_tree)
-{
-  unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
-  if (pointee_size == 0)
-    return 0;
-  unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
-
-  return alloc_size % pointee_size;
-}
-
-/* Visits svalues and checks whether the 
-   size_cst is a operand of the svalue.  */
-
-class size_visitor : public visitor
-{
-public:
-  size_visitor(sm_context *ctxt, tree size_cst, const svalue *sval) 
-  : m_sm_ctxt(ctxt), m_size_cst(size_cst), m_sval(sval)
-  {
-    sval->accept(this);
-  }
-
-  bool get_result()
-  {
-    /* The result_set gradually builts from atomtic nodes upwards. If a node is
-       in the result_set, itself or one/all of its children have an operand that
-       is a multiple of the size_cst. If the root is inside, the given sval 
-       is valid aka a multiple of the size_cst.*/
-    return result_set.contains(m_sval);
-  }
-
-  void 
-  visit_constant_svalue (const constant_svalue *sval) final override
-  {
-    unsigned HOST_WIDE_INT sval_int
-	  = TREE_INT_CST_LOW (sval->get_constant ());
-    unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (m_size_cst);
-    if (size_cst_int == 0 || sval_int % size_cst_int == 0)
-      result_set.add (sval);
-  }
-
-  void 
-  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED) 
-    final override
-  {
-    result_set.add (sval);
-  }
-
-  void 
-  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED) 
-    final override
-  {
-    result_set.add (sval);
-  }
-  
-  void visit_unaryop_svalue (const unaryop_svalue *sval) 
-  {
-    const svalue *arg = sval->get_arg ();
-    arg->accept (this);
-    if (result_set.contains (arg))
-	result_set.add (sval);
-  }
-
-  void visit_binop_svalue (const binop_svalue *sval) final override
-  {
-    const svalue *arg0 = sval->get_arg0 ();
-    const svalue *arg1 = sval->get_arg1 ();
-
-    arg0->accept (this);
-    arg1->accept (this);
-    if (sval->get_op () == MULT_EXPR)
-      {
-	if (result_set.contains (arg0) || result_set.contains (arg1))
-	  result_set.add (sval);
-      }
-    else
-      {
-	if (result_set.contains (arg0) && result_set.contains (arg1))
-	  result_set.add (sval);
-      }
-  }
-
-  void visit_repeated_svalue (const repeated_svalue *sval) 
-  {
-    sval->get_inner_svalue ()->accept(this);
-    if (result_set.contains (sval->get_inner_svalue ()))
-      result_set.add (sval);
-  }
-
-  void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
-  {
-    sval->get_arg ()->accept (this);
-    if (result_set.contains (sval->get_arg ()))
-      result_set.add (sval);
-  }
-
-  void visit_widening_svalue (const widening_svalue *sval) final override
-  {
-    const svalue *base = sval->get_base_svalue ();
-    const svalue *iter = sval->get_iter_svalue ();
-
-    base->accept(this);
-    iter->accept(this);
-    if (result_set.contains (base) && result_set.contains (iter))
-      result_set.add (sval);
-  }
-
-  void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED) 
-    final override
-  {
-    region_model *model = m_sm_ctxt->get_old_program_state ()->m_region_model;
-    constraint_manager *cm = model->get_constraints ();
-    if (cm->get_equiv_class_by_svalue (sval, NULL))
-      result_set.add (sval);
-  }
-
-  void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED) 
-    final override
-  {
-    // TODO: Should we do something else than assume it could be correct
-    result_set.add (sval);
-  }
-
-  void visit_const_fn_result_svalue (const const_fn_result_svalue 
-				      *sval ATTRIBUTE_UNUSED) final override
-  {
-    // TODO: Should we do something else than assume it could be correct
-    result_set.add (sval);
-  }
-
-private:
-  sm_context *m_sm_ctxt;
-  tree m_size_cst;
-  const svalue *m_sval;
-  svalue_set result_set; /* Used as a mapping of svalue*->bool.  */
-};
-
-/* Returns true if there is a constant tree with 
-   the same constant value inside the sval.  */
-
-static bool
-const_operand_in_sval_p (sm_context *sm_ctxt, tree type_size_cst, const svalue *sval)
-{
-  size_visitor v(sm_ctxt, type_size_cst, sval);
-  // sval->accept(&v);
-  return v.get_result ();
-}
-
-/* Special handling for structs with "inheritance" or that hold an unbounded 
-     type. Those will be skipped to prevent false positives.  */
-
-static bool
-struct_or_union_with_inheritance_p (tree maybe_struct)
-{
-  if (RECORD_OR_UNION_TYPE_P (maybe_struct))
-    {
-      tree iter = TYPE_FIELDS (maybe_struct);
-      if (iter != NULL_TREE && RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
-        return true;
-
-      tree last_field;
-      while (iter != NULL_TREE)
-        {
-          last_field = iter;
-          iter = DECL_CHAIN (iter);
-        }
-
-      if (last_field != NULL_TREE 
-          && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
-        return true;
-    }
-  return false;
-}
-
-static void
-check_capacity (sm_context *sm_ctxt, 
-		const malloc_state_machine &sm,
-		const supernode *node,
-		const gimple *stmt,
-		tree lhs,
-		tree rhs,
-		const svalue *capacity)
-{
-  tree pointer_type = TREE_TYPE (lhs);
-  gcc_assert (POINTER_TYPE_P (pointer_type));
-
-  tree pointee_type = TREE_TYPE (pointer_type);
-  /* void * is always compatible.  */
-  if (VOID_TYPE_P (pointee_type))
-    return;
-
-  if (struct_or_union_with_inheritance_p (pointee_type))
-    return;
-
-  tree pointee_size_tree = size_in_bytes(pointee_type);
-  /* The size might be unknown e.g. being a array with n elements
-     or casting to char * never has any trailing bytes.  */
-  if (TREE_CODE (pointee_size_tree) != INTEGER_CST
-      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
-    return;
-
-  switch (capacity->get_kind ())
-    {
-    case svalue_kind::SK_CONSTANT:
-      {
-	const constant_svalue *cst_sval = capacity->dyn_cast_constant_svalue ();
-	tree cst = cst_sval->get_constant ();
-	unsigned HOST_WIDE_INT size_diff
-	  = capacity_compatible_with_type (cst, pointee_size_tree);
-	if (size_diff != 0)
-	  {
-	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
-	    sm_ctxt->warn (node, stmt, diag_arg, 
-			  new dubious_allocation_size (sm, lhs, diag_arg,
-						       cst, size_diff));
-	  }
-      }
-      break;
-    default:
-      {
-	if (!const_operand_in_sval_p (sm_ctxt, pointee_size_tree, capacity))
-	  {
-	    tree diag_arg = sm_ctxt->get_diagnostic_tree (rhs);
-	    sm_ctxt->warn (node, stmt, diag_arg, 
-			  new dubious_allocation_size (sm, lhs, diag_arg,
-						       pointee_size_tree));
-	  }
-      }
-      break;
-    }
-}
-
 /* Implementation of state_machine::on_stmt vfunc for malloc_state_machine.  */
 
 bool
@@ -2005,14 +1759,14 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
       {
 	if (known_allocator_p (callee_fndecl, call))
 	  {
-	    on_allocator_call (sm_ctxt, node, call, &m_free);
+	    on_allocator_call (sm_ctxt, call, &m_free);
 	    return true;
 	  }
 
 	if (is_named_call_p (callee_fndecl, "operator new", call, 1))
-	  on_allocator_call (sm_ctxt, node, call, &m_scalar_delete);
+	  on_allocator_call (sm_ctxt, call, &m_scalar_delete);
 	else if (is_named_call_p (callee_fndecl, "operator new []", call, 1))
-	  on_allocator_call (sm_ctxt, node, call, &m_vector_delete);
+	  on_allocator_call (sm_ctxt, call, &m_vector_delete);
 	else if (is_named_call_p (callee_fndecl, "operator delete", call, 1)
 		 || is_named_call_p (callee_fndecl, "operator delete", call, 2))
 	  {
@@ -2067,7 +1821,7 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	    tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (callee_fndecl));
 	    bool returns_nonnull
 	      = lookup_attribute ("returns_nonnull", attrs);
-	    on_allocator_call (sm_ctxt, node, call, deallocators, returns_nonnull);
+	    on_allocator_call (sm_ctxt, call, deallocators, returns_nonnull);
 	  }
 
 	/* Handle "__attribute__((nonnull))".   */
@@ -2123,30 +1877,11 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 	      = mutable_this->get_or_create_deallocator (callee_fndecl);
 	    on_deallocator_call (sm_ctxt, node, call, d, dealloc_argno);
 	  }
-
-  /* Handle returns from function calls.  */ 
-	tree lhs = gimple_call_lhs (call);
-	if (lhs && TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE
-		&& TREE_CODE (gimple_call_return_type (call)) == POINTER_TYPE)
-	  on_pointer_assignment (sm_ctxt, node, call, lhs, 
-				gimple_call_fn (call));
       }
 
   if (tree lhs = sm_ctxt->is_zero_assignment (stmt))
     if (any_pointer_p (lhs))
       on_zero_assignment (sm_ctxt, stmt,lhs);
-
-  /* Handle pointer assignments/casts for dubious allocation size.  */
-  if (const gassign *assign_stmt = dyn_cast <const gassign *> (stmt)) 
-    {
-      if (gimple_num_ops (stmt) == 2) 
-	{
-	  tree lhs = gimple_assign_lhs (assign_stmt);
-	  tree rhs = gimple_assign_rhs1 (assign_stmt);
-	  if (any_pointer_p (lhs) && any_pointer_p (rhs))
-	      on_pointer_assignment (sm_ctxt, node, assign_stmt, lhs, rhs);
-	}
-    }
 
   /* Handle dereferences.  */
   for (unsigned i = 0; i < gimple_num_ops (stmt); i++)
@@ -2197,7 +1932,6 @@ malloc_state_machine::on_stmt (sm_context *sm_ctxt,
 
 void
 malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
-					 const supernode *node,
 					 const gcall *call,
 					 const deallocator_set *deallocators,
 					 bool returns_nonnull) const
@@ -2210,9 +1944,6 @@ malloc_state_machine::on_allocator_call (sm_context *sm_ctxt,
 				 (returns_nonnull
 				  ? deallocators->m_nonnull
 				  : deallocators->m_unchecked));
-      
-      if (TREE_CODE (TREE_TYPE (lhs)) == POINTER_TYPE)
-	on_pointer_assignment (sm_ctxt, node, call, lhs, gimple_call_fn (call));
     }
   else
     {
@@ -2348,60 +2079,6 @@ malloc_state_machine::on_realloc_call (sm_context *sm_ctxt,
       handle_free_of_non_heap (sm_ctxt, node, call, arg, d);
       if (path_context *path_ctxt = sm_ctxt->get_path_context ())
 	path_ctxt->terminate_path ();
-    }
-}
-
-/* Handle assignments between two pointers.
-   Check for dubious allocation sizes.
-*/
-
-void
-malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
-		      const supernode *node,
-		      const gassign *assign_stmt,
-		      tree lhs,
-		      tree rhs) const
-{
-  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
-      warnings on assignments after the cast.  */
-  if (pending_diagnostic::same_tree_p (TREE_TYPE (lhs), TREE_TYPE (rhs)))
-    return;
-
-  const program_state *state = sm_ctxt->get_old_program_state ();
-  const svalue *r_value = state->m_region_model->get_rvalue (rhs, NULL);
-  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
-    {
-      const svalue *capacity = state->m_region_model->get_capacity 
-	    (reg->get_pointee ());
-      check_capacity(sm_ctxt, *this, node, assign_stmt, lhs, rhs, capacity);
-    }
-}
-
-void
-malloc_state_machine::on_pointer_assignment (sm_context *sm_ctxt,
-		      const supernode *node,
-		      const gcall *call,
-		      tree lhs,
-		      tree fn_decl) const
-{
-  /* Do not warn if lhs and rhs are of the same type to not emit duplicate
-      warnings on assignments after the cast.  */
-  if (pending_diagnostic::same_tree_p 
-	(TREE_TYPE (lhs), TREE_TYPE (gimple_call_return_type (call))))
-    return;
-
-  const program_state *state = sm_ctxt->get_new_program_state ();
-  const svalue *r_value = state->m_region_model->get_rvalue (lhs, NULL);
-  if (const region_svalue *reg = dyn_cast <const region_svalue *> (r_value))
-    {
-      const svalue *capacity = state->m_region_model->get_capacity 
-	    (reg->get_pointee ());
-      check_capacity (sm_ctxt, *this, node, call, lhs, fn_decl, capacity);
-    }
-  else if (const conjured_svalue *con
-	     = dyn_cast <const conjured_svalue *> (r_value))
-    {
-      // FIXME: How to get a region_svalue? 
     }
 }
 

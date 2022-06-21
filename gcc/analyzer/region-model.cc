@@ -73,6 +73,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "ssa-iterators.h"
 #include "calls.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -651,6 +652,57 @@ private:
   const gassign *m_assign;
   int m_operand_precision;
   tree m_count_cst;
+};
+
+/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
+
+class dubious_allocation_size
+: public pending_diagnostic_subclass<dubious_allocation_size>
+{
+public:
+  dubious_allocation_size () {}
+
+  const char *get_kind () const final override 
+  { 
+    return "dubious_allocation_size"; 
+  }
+
+  bool operator== (const dubious_allocation_size &other) const
+  {
+    return true;
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_allocation_size;
+  }
+
+  // bool subclass_equal_p (const pending_diagnostic &base_other) const
+  // final override
+  // {
+  //   const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
+  //   return true;
+  // }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (131);
+    return warning_meta (rich_loc, m, get_controlling_option (),
+	       "Allocated buffer size is not a multiple of the pointee's size");
+  }
+
+private:
+  enum dubious_allocation_type {
+    CONSTANT_SIZE,
+    MISSING_OPERAND
+  };
+
+  dubious_allocation_type m_type;
+  diagnostic_event_id_t m_alloc_event;
+  tree m_lhs;
+  tree m_size_tree;
+  unsigned HOST_WIDE_INT m_size_diff;
 };
 
 /* If ASSIGN is a stmt that can be modelled via
@@ -2799,6 +2851,241 @@ region_model::check_region_for_read (const region *src_reg,
   check_region_access (src_reg, DIR_READ, ctxt);
 }
 
+/* Returns the trailing bytes on dubious allocation sizes.  */
+
+static unsigned HOST_WIDE_INT 
+capacity_compatible_with_type (tree cst, tree pointee_size_tree)
+{
+  unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
+  if (pointee_size == 0)
+    return 0;
+  unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
+
+  return alloc_size % pointee_size;
+}
+
+/* Visits svalues and checks whether the 
+   size_cst is a operand of the svalue.  */
+
+class size_visitor : public visitor
+{
+public:
+  size_visitor(tree size_cst, const svalue *sval, constraint_manager *cm) 
+  : m_size_cst(size_cst), m_sval(sval), m_cm(cm)
+  {
+    sval->accept(this);
+  }
+
+  bool get_result()
+  {
+    /* The result_set gradually builts from atomtic nodes upwards. If a node is
+       in the result_set, itself or one/all of its children have an operand that
+       is a multiple of the size_cst. If the root is inside, the given sval 
+       is valid aka a multiple of the size_cst.*/
+    return result_set.contains(m_sval);
+  }
+
+  void 
+  visit_constant_svalue (const constant_svalue *sval) final override
+  {
+    unsigned HOST_WIDE_INT sval_int
+	  = TREE_INT_CST_LOW (sval->get_constant ());
+    unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (m_size_cst);
+    if (size_cst_int == 0 || sval_int % size_cst_int == 0)
+      result_set.add (sval);
+  }
+
+  void 
+  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    result_set.add (sval);
+  }
+
+  void 
+  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    result_set.add (sval);
+  }
+  
+  void visit_unaryop_svalue (const unaryop_svalue *sval) 
+  {
+    const svalue *arg = sval->get_arg ();
+    arg->accept (this);
+    if (result_set.contains (arg))
+	result_set.add (sval);
+  }
+
+  void visit_binop_svalue (const binop_svalue *sval) final override
+  {
+    const svalue *arg0 = sval->get_arg0 ();
+    const svalue *arg1 = sval->get_arg1 ();
+
+    arg0->accept (this);
+    arg1->accept (this);
+    if (sval->get_op () == MULT_EXPR)
+      {
+	if (result_set.contains (arg0) || result_set.contains (arg1))
+	  result_set.add (sval);
+      }
+    else
+      {
+	if (result_set.contains (arg0) && result_set.contains (arg1))
+	  result_set.add (sval);
+      }
+  }
+
+  void visit_repeated_svalue (const repeated_svalue *sval) 
+  {
+    sval->get_inner_svalue ()->accept(this);
+    if (result_set.contains (sval->get_inner_svalue ()))
+      result_set.add (sval);
+  }
+
+  void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
+  {
+    sval->get_arg ()->accept (this);
+    if (result_set.contains (sval->get_arg ()))
+      result_set.add (sval);
+  }
+
+  void visit_widening_svalue (const widening_svalue *sval) final override
+  {
+    const svalue *base = sval->get_base_svalue ();
+    const svalue *iter = sval->get_iter_svalue ();
+
+    base->accept(this);
+    iter->accept(this);
+    if (result_set.contains (base) && result_set.contains (iter))
+      result_set.add (sval);
+  }
+
+  void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    if (m_cm->get_equiv_class_by_svalue (sval, NULL))
+      result_set.add (sval);
+  }
+
+  void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED) 
+    final override
+  {
+    // TODO: Should we do something else than assume it could be correct
+    result_set.add (sval);
+  }
+
+  void visit_const_fn_result_svalue (const const_fn_result_svalue 
+				      *sval ATTRIBUTE_UNUSED) final override
+  {
+    // TODO: Should we do something else than assume it could be correct
+    result_set.add (sval);
+  }
+
+private:
+  tree m_size_cst;
+  const svalue *m_sval;
+  constraint_manager *m_cm;
+  svalue_set result_set; /* Used as a mapping of svalue*->bool.  */
+};
+
+/* Returns true if there is a constant tree with 
+   the same constant value inside the sval.  */
+
+static bool
+const_operand_in_sval_p (tree type_size_cst, const svalue *sval,
+                         constraint_manager *cm)
+{
+  size_visitor v(type_size_cst, sval, cm);
+  // sval->accept(&v);
+  return v.get_result ();
+}
+
+/* Special handling for structs with "inheritance" or that hold an unbounded 
+     type. Those will be skipped to prevent false positives.  */
+
+static bool
+struct_or_union_with_inheritance_p (tree maybe_struct)
+{
+  if (RECORD_OR_UNION_TYPE_P (maybe_struct))
+    {
+      tree iter = TYPE_FIELDS (maybe_struct);
+      if (iter == NULL_TREE)
+        return false;
+      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
+        return true;
+
+      tree last_field;
+      while (iter != NULL_TREE)
+        {
+          last_field = iter;
+          iter = DECL_CHAIN (iter);
+        }
+
+      if (last_field != NULL_TREE 
+          && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
+        return true;
+    }
+  return false;
+}
+
+void
+region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
+			                           region_model_context *ctxt) const
+{
+  if (!ctxt)
+    return;
+  
+  const region_svalue *reg_sval = dyn_cast <const region_svalue *> (rhs_sval);
+  if (!reg_sval)
+    return;
+
+  tree pointer_type = lhs_reg->get_type ();
+  if (pointer_type == NULL_TREE || !POINTER_TYPE_P (pointer_type))
+    return;
+
+  tree pointee_type = TREE_TYPE (pointer_type);
+  /* void * is always compatible and make sure that the pointee_type actually
+     has a size, or else size_in_bytes might fail.  */
+  if (pointee_type == NULL_TREE || VOID_TYPE_P (pointee_type) 
+      || TYPE_SIZE_UNIT (pointee_type) == NULL_TREE)
+    return;
+  if (struct_or_union_with_inheritance_p (pointee_type))
+    return;
+
+  tree pointee_size_tree = size_in_bytes(pointee_type);
+  /* The size might be unknown e.g. being a array with n elements
+     or casting to char * never has any trailing bytes.  */
+  if (TREE_CODE (pointee_size_tree) != INTEGER_CST
+      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
+    return;
+
+  const svalue *capacity = get_capacity (reg_sval->get_pointee ());
+  switch (capacity->get_kind ())
+    {
+    case svalue_kind::SK_CONSTANT:
+      {
+	const constant_svalue *cap_sval = capacity->dyn_cast_constant_svalue ();
+	tree cap = cap_sval->get_constant ();
+	unsigned HOST_WIDE_INT size_diff
+	  = capacity_compatible_with_type (cap, pointee_size_tree);
+	if (size_diff != 0)
+	  {
+	    ctxt->warn (new dubious_allocation_size ());
+	  }
+      }
+      break;
+    default:
+      {
+	if (!const_operand_in_sval_p (pointee_size_tree, capacity, m_constraints))
+	  {
+	    ctxt->warn (new dubious_allocation_size ());
+	  }
+      }
+      break;
+    }
+}
+
 /* Set the value of the region given by LHS_REG to the value given
    by RHS_SVAL.
    Use CTXT to report any warnings associated with writing to LHS_REG.  */
@@ -2809,6 +3096,8 @@ region_model::set_value (const region *lhs_reg, const svalue *rhs_sval,
 {
   gcc_assert (lhs_reg);
   gcc_assert (rhs_sval);
+
+  check_region_size(lhs_reg, rhs_sval, ctxt);
 
   check_region_for_write (lhs_reg, ctxt);
 

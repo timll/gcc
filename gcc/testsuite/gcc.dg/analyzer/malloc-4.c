@@ -2,8 +2,8 @@
 
 #include <stdlib.h>
 
-struct foo {};
-struct bar {};
+struct foo;
+struct bar;
 void *hv (struct foo **tm)
 {
   void *p = __builtin_malloc (4);

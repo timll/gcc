@@ -18,8 +18,8 @@ void test_2 (void)
   int *ptr = malloc (n * sizeof (short)); /* { dg-line malloc } */
   free (ptr);
 
-  /* { dg-warning "Allocated buffer size is not a multiple of the pointee's size" "" { target *-*-* } malloc } */
-  /* { dg-message "\\(1\\) Allocation is incompatible with 'int \\*'" "" { target *-*-* } malloc } */
+  /* { dg-warning "" "" { target *-*-* } malloc } */
+  /* { dg-message "" "" { target *-*-* } malloc } */
 }
 
 void test_3 (void)
@@ -39,6 +39,6 @@ void test_4 (void)
   int *iptr = (int *)ptr; /* { dg-line assign } */
   free (iptr);
 
-  /* { dg-warning "Allocated buffer size is not a multiple of the pointee's size" "" { target *-*-* } assign } */
-  /* { dg-message "\\(2\\) 'ptr' is incompatible with 'int \\*'; either the allocated size at \\(1\\)" "" { target *-*-* } assign } */
+  /* { dg-warning "" "" { target *-*-* } assign } */
+  /* { dg-message "" "" { target *-*-* } assign } */
 }
