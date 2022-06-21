@@ -660,7 +660,7 @@ class dubious_allocation_size
 : public pending_diagnostic_subclass<dubious_allocation_size>
 {
 public:
-  dubious_allocation_size () {}
+  dubious_allocation_size (const region *lhs, const region *rhs) : m_lhs(lhs), m_rhs(rhs) {}
 
   const char *get_kind () const final override 
   { 
@@ -669,20 +669,13 @@ public:
 
   bool operator== (const dubious_allocation_size &other) const
   {
-    return true;
+    return m_lhs == other.m_lhs && m_rhs == other.m_rhs;;
   }
 
   int get_controlling_option () const final override
   {
     return OPT_Wanalyzer_allocation_size;
   }
-
-  // bool subclass_equal_p (const pending_diagnostic &base_other) const
-  // final override
-  // {
-  //   const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
-  //   return true;
-  // }
 
   bool emit (rich_location *rich_loc) final override
   {
@@ -692,17 +685,27 @@ public:
 	       "Allocated buffer size is not a multiple of the pointee's size");
   }
 
-private:
-  enum dubious_allocation_type {
-    CONSTANT_SIZE,
-    MISSING_OPERAND
-  };
+  label_text describe_state_change (const evdesc::state_change &ev) final override
+  {
+    return ev.formatted_print ("allocated here");
+  }
 
-  dubious_allocation_type m_type;
-  diagnostic_event_id_t m_alloc_event;
-  tree m_lhs;
-  tree m_size_tree;
-  unsigned HOST_WIDE_INT m_size_diff;
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+    return ev.formatted_print ("Assigned to %qT here", m_lhs->get_type ());
+  }
+
+  void mark_interesting_stuff (interesting_t *interest) final override
+  {
+    if (m_lhs)
+      interest->add_region_creation (m_lhs);
+    if (m_rhs)
+      interest->add_region_creation (m_rhs);
+  }
+
+private:
+  const region *m_lhs;
+  const region *m_rhs;
 };
 
 /* If ASSIGN is a stmt that can be modelled via
@@ -3071,7 +3074,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	  = capacity_compatible_with_type (cap, pointee_size_tree);
 	if (size_diff != 0)
 	  {
-	    ctxt->warn (new dubious_allocation_size ());
+	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee ()));
 	  }
       }
       break;
@@ -3079,7 +3082,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
       {
 	if (!const_operand_in_sval_p (pointee_size_tree, capacity, m_constraints))
 	  {
-	    ctxt->warn (new dubious_allocation_size ());
+	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee ()));
 	  }
       }
       break;

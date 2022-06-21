@@ -304,6 +304,8 @@ region_creation_event::region_creation_event (const region *reg,
 label_text
 region_creation_event::get_desc (bool) const
 {
+  // TODO: let me change this
+
   switch (m_reg->get_memory_space ())
     {
     default:
