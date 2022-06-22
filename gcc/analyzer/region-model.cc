@@ -684,20 +684,21 @@ public:
     diagnostic_metadata m;
     m.add_cwe (131);
     return warning_meta (rich_loc, m, get_controlling_option (),
-	       "Allocated buffer size is not a multiple of the pointee's size");
+	       "allocated buffer size is not a multiple of the pointee's size");
   }
 
   label_text 
-  describe_region_creation_event (const evdesc::region_creation &ev) final override
+  describe_region_creation_event (const evdesc::region_creation &ev) final 
+  override
   {
     // TODO: better way to print the capacity
     return ev.formatted_print ("allocated %s here", 
-                                          m_capacity->get_desc(true).m_buffer);
+                               m_capacity->get_desc(true).m_buffer);
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
   {
-    return ev.formatted_print ("Assigned to %qT here", m_lhs->get_type ());
+    return ev.formatted_print ("assigned to %qT here", m_lhs->get_type ());
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
@@ -2860,7 +2861,7 @@ region_model::check_region_for_read (const region *src_reg,
   check_region_access (src_reg, DIR_READ, ctxt);
 }
 
-/* Returns the trailing bytes on dubious allocation sizes.  */
+/* Return the trailing bytes on dubious allocation sizes.  */
 
 static unsigned HOST_WIDE_INT 
 capacity_compatible_with_type (tree cst, tree pointee_size_tree)
@@ -2873,8 +2874,11 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree)
   return alloc_size % pointee_size;
 }
 
-/* Visits svalues and checks whether the 
-   size_cst is a operand of the svalue.  */
+/* Checks whether SVAL could be a multiple of SIZE_CST.
+  
+   It works by visiting all svalues inside SVAL until it reaches
+   atomic nodes. From those, it goes back up again and adds each
+   node that might be a multiple of SIZE_CST to the RESULT_SET.  */
 
 class size_visitor : public visitor
 {
@@ -2887,10 +2891,6 @@ public:
 
   bool get_result()
   {
-    /* The result_set gradually builts from atomtic nodes upwards. If a
-       node is in the result_set, itself or one/all of its children have
-       an operand that is a multiple of the size_cst. If the root is inside,
-       the given sval is valid aka a multiple of the size_cst.  */
     return result_set.contains(m_sval);
   }
 
@@ -2996,7 +2996,7 @@ private:
   svalue_set result_set; /* Used as a mapping of svalue*->bool.  */
 };
 
-/* Returns true if there is a constant tree with 
+/* Return true if there is a constant tree with
    the same constant value inside the sval.  */
 
 static bool
@@ -3007,7 +3007,7 @@ const_operand_in_sval_p (tree type_size_cst, const svalue *sval,
   return v.get_result ();
 }
 
-/* Returns true if a struct or union either uses the inheritance pattern,
+/* Return true if a struct or union either uses the inheritance pattern,
    where the first field is a base struct, or the flexible array member
    pattern, where the last field is an array without a specified size.  */
 
