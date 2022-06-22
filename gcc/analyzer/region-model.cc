@@ -660,7 +660,9 @@ class dubious_allocation_size
 : public pending_diagnostic_subclass<dubious_allocation_size>
 {
 public:
-  dubious_allocation_size (const region *lhs, const region *rhs) : m_lhs(lhs), m_rhs(rhs) {}
+  dubious_allocation_size (const region *lhs, const region *rhs, 
+                           const svalue *capacity)
+  : m_lhs(lhs), m_rhs(rhs), m_capacity(capacity) {}
 
   const char *get_kind () const final override 
   { 
@@ -685,9 +687,12 @@ public:
 	       "Allocated buffer size is not a multiple of the pointee's size");
   }
 
-  label_text describe_state_change (const evdesc::state_change &ev) final override
+  label_text 
+  describe_region_creation_event (const evdesc::region_creation &ev) final override
   {
-    return ev.formatted_print ("allocated here");
+    // TODO: better way to print the capacity
+    return ev.formatted_print ("allocated %s here", 
+                                          m_capacity->get_desc(true).m_buffer);
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
@@ -706,6 +711,7 @@ public:
 private:
   const region *m_lhs;
   const region *m_rhs;
+  const svalue *m_capacity;
 };
 
 /* If ASSIGN is a stmt that can be modelled via
@@ -3074,7 +3080,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	  = capacity_compatible_with_type (cap, pointee_size_tree);
 	if (size_diff != 0)
 	  {
-	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee ()));
+	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee (), capacity));
 	  }
       }
       break;
@@ -3082,7 +3088,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
       {
 	if (!const_operand_in_sval_p (pointee_size_tree, capacity, m_constraints))
 	  {
-	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee ()));
+	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee (), capacity));
 	  }
       }
       break;
@@ -4280,6 +4286,30 @@ region_model::pop_frame (tree result_lvalue,
     }
 
   unbind_region_and_descendents (frame_reg,POISON_KIND_POPPED_STACK);
+}
+
+// FIXME: How to call the call_lhs <- <return_value> on the caller context
+//        with the call site set as a stmt?
+void
+region_model::set_return (const gcall *call, region_model_context *ctxt)
+{
+  if (0)
+    {
+      tree lhs = gimple_call_lhs (call);
+      tree fndecl = gimple_call_fndecl (call);
+      tree result = DECL_RESULT (fndecl);
+      const svalue *retval = NULL;
+      if (result && TREE_TYPE (result) != void_type_node)
+          retval = get_rvalue (result, ctxt);
+
+      if (lhs && retval)
+      {
+        /* Compute result_dst_reg using RESULT_LVALUE *after* popping
+      the frame, but before poisoning pointers into the old frame.  */
+        const region *result_dst_reg = get_lvalue (lhs, ctxt);
+        set_value (result_dst_reg, retval, ctxt);
+      }
+    }
 }
 
 /* Get the number of frames in this region_model's stack.  */

@@ -2101,6 +2101,7 @@ diagnostic_manager::add_events_for_superedge (const path_builder &pb,
   const int src_stack_depth = src_point.get_stack_depth ();
   const int dst_stack_depth = dst_point.get_stack_depth ();
   const gimple *last_stmt = src_point.get_supernode ()->get_last_stmt ();
+  debug_gimple_stmt ((gimple *)last_stmt);
 
   switch (eedge.m_sedge->m_kind)
     {
