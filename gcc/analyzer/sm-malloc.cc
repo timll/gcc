@@ -42,13 +42,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/program-point.h"
 #include "analyzer/store.h"
 #include "analyzer/region-model.h"
-#include "analyzer/constraint-manager.h"
 #include "stringpool.h"
 #include "attribs.h"
 #include "analyzer/function-set.h"
 #include "analyzer/program-state.h"
-#include "print-tree.h"
-#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -1434,135 +1431,6 @@ private:
   const region *m_freed_reg;
   const char *m_funcname;
 };
-
-/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
-
-class dubious_allocation_size : public malloc_diagnostic
-{
-public:
-  dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
-			   tree size_tree, unsigned HOST_WIDE_INT size_diff)
-  : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::CONSTANT_SIZE), 
-    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(size_diff) 
-    {}
-  
-  dubious_allocation_size (const malloc_state_machine &sm, tree lhs, tree rhs,
-			   tree size_tree)
-  : malloc_diagnostic(sm, rhs), m_type(dubious_allocation_type::MISSING_OPERAND), 
-    m_lhs(lhs), m_size_tree(size_tree), m_size_diff(0) 
-    {}
-
-  const char *get_kind () const final override 
-  { 
-    return "dubious_allocation_size"; 
-  }
-
-  int get_controlling_option () const final override
-  {
-    return OPT_Wanalyzer_allocation_size;
-  }
-
-  bool subclass_equal_p (const pending_diagnostic &base_other) const
-  final override
-  {
-    const dubious_allocation_size &other = (const dubious_allocation_size &)base_other;
-    return malloc_diagnostic::subclass_equal_p(other)
-	   && m_type == other.m_type
-	   && same_tree_p (m_lhs, other.m_lhs)
-	   && same_tree_p (m_size_tree, other.m_size_tree)
-	   && m_size_diff == other.m_size_diff;
-  }
-
-  bool emit (rich_location *rich_loc) final override
-  {
-    diagnostic_metadata m;
-    m.add_cwe (131);
-    return warning_meta (rich_loc, m, get_controlling_option (),
-	       "Allocated buffer size is not a multiple of the pointee's size");
-  }
-
-  label_text describe_state_change (const evdesc::state_change &change)
-    override
-  {
-    if (change.m_old_state == m_sm.get_start_state ()
-	&& unchecked_p (change.m_new_state))
-      {
-	m_alloc_event = change.m_event_id;
-	if (m_type == dubious_allocation_type::CONSTANT_SIZE)
-	  {
-	    // TODO: verify that it's the allocation stmt, not a copy
-	    return change.formatted_print ("%E bytes allocated here", 
-					   m_size_tree);
-	  }
-      }
-    return malloc_diagnostic::describe_state_change (change);
-  }
-
-  label_text describe_final_event (const evdesc::final_event &ev) final override
-  {
-    if (m_type == dubious_allocation_type::CONSTANT_SIZE)
-      {
-	if (m_alloc_event.known_p ())
-	  return ev.formatted_print (
-	    "Casting %qE to %qT leaves %wu trailing bytes; either the"
-	    " allocated size is bogus or the type on the left-hand side is"
-	    " wrong",
-	    m_arg, TREE_TYPE (m_lhs), m_size_diff);
-	else
-	  return ev.formatted_print (
-	    "Casting a %E byte buffer to %qT leaves %wu trailing bytes; either"
-	    " the allocated size is bogus or the type on the left-hand side is"
-	    " wrong",
-	    m_size_tree, TREE_TYPE (m_lhs), m_size_diff);
-      }
-    else if (m_type == dubious_allocation_type::MISSING_OPERAND)
-      {
-	if (m_alloc_event.known_p ())
-	  return ev.formatted_print (
-	    "%qE is incompatible with %qT; either the allocated size at %@ is"
-	    " bogus or the type on the left-hand side is wrong",
-	    m_arg, TREE_TYPE (m_lhs), &m_alloc_event);
-	else
-	  return ev.formatted_print (
-	    "Allocation is incompatible with %qT; either the allocated size is"
-	    " bogus or the type on the left-hand side is wrong",
-	    TREE_TYPE (m_lhs));
-      }
-
-    gcc_unreachable ();
-    return label_text ();
-  }
-
-private:
-  enum dubious_allocation_type {
-    CONSTANT_SIZE,
-    MISSING_OPERAND
-  };
-
-  dubious_allocation_type m_type;
-  diagnostic_event_id_t m_alloc_event;
-  tree m_lhs;
-  tree m_size_tree;
-  unsigned HOST_WIDE_INT m_size_diff;
-};
-
-/* struct allocation_state : public state_machine::state.  */
-
-/* Implementation of state_machine::state::dump_to_pp vfunc
-   for allocation_state: append the API that this allocation is
-   associated with.  */
-
-void
-allocation_state::dump_to_pp (pretty_printer *pp) const
-{
-  state_machine::state::dump_to_pp (pp);
-  if (m_deallocators)
-    {
-      pp_string (pp, " (");
-      m_deallocators->dump_to_pp (pp);
-      pp_character (pp, ')');
-    }
-}
 
 /* Given a allocation_state for a deallocator_set, get the "nonnull" state
    for the corresponding allocator(s).  */

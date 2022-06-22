@@ -59,7 +59,7 @@ struct event_desc
   bool m_colorize;
 };
 
-/* For use by pending_diagnostic::describe_state_change.  */
+/* For use by pending_diagnostic::describe_region_creation.  */
 
 struct region_creation : public event_desc
 {
