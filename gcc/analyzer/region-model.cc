@@ -2887,10 +2887,10 @@ public:
 
   bool get_result()
   {
-    /* The result_set gradually builts from atomtic nodes upwards. If a node is
-       in the result_set, itself or one/all of its children have an operand that
-       is a multiple of the size_cst. If the root is inside, the given sval 
-       is valid aka a multiple of the size_cst.*/
+    /* The result_set gradually builts from atomtic nodes upwards. If a
+       node is in the result_set, itself or one/all of its children have
+       an operand that is a multiple of the size_cst. If the root is inside,
+       the given sval is valid aka a multiple of the size_cst.  */
     return result_set.contains(m_sval);
   }
 
@@ -2980,14 +2980,12 @@ public:
   void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED) 
     final override
   {
-    // TODO: Should we do something else than assume it could be correct
     result_set.add (sval);
   }
 
   void visit_const_fn_result_svalue (const const_fn_result_svalue 
 				      *sval ATTRIBUTE_UNUSED) final override
   {
-    // TODO: Should we do something else than assume it could be correct
     result_set.add (sval);
   }
 
@@ -3006,12 +3004,12 @@ const_operand_in_sval_p (tree type_size_cst, const svalue *sval,
                          constraint_manager *cm)
 {
   size_visitor v(type_size_cst, sval, cm);
-  // sval->accept(&v);
   return v.get_result ();
 }
 
-/* Special handling for structs with "inheritance" or that hold an unbounded 
-     type. Those will be skipped to prevent false positives.  */
+/* Returns true if a struct or union either uses the inheritance pattern,
+   where the first field is a base struct, or the flexible array member
+   pattern, where the last field is an array without a specified size.  */
 
 static bool
 struct_or_union_with_inheritance_p (tree maybe_struct)
@@ -3038,6 +3036,10 @@ struct_or_union_with_inheritance_p (tree maybe_struct)
   return false;
 }
 
+/* On pointer assignments, check whether the buffer size of 
+   RHS_SVAL is compatible with the type of the LHS_REG.
+   Use a non-null CTXT to report allocation size warnings.  */
+
 void
 region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 			                           region_model_context *ctxt) const
@@ -3054,17 +3056,19 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     return;
 
   tree pointee_type = TREE_TYPE (pointer_type);
-  /* void * is always compatible and make sure that the pointee_type actually
-     has a size, or else size_in_bytes might fail.  */
+  /* Make sure that the type on the left-hand size actually has a size.  */
   if (pointee_type == NULL_TREE || VOID_TYPE_P (pointee_type) 
       || TYPE_SIZE_UNIT (pointee_type) == NULL_TREE)
     return;
+
+  /* Bail out early on pointers to structs where we can 
+     not deduce whether the buffer size is compatible.  */
   if (struct_or_union_with_inheritance_p (pointee_type))
     return;
 
   tree pointee_size_tree = size_in_bytes(pointee_type);
-  /* The size might be unknown e.g. being a array with n elements
-     or casting to char * never has any trailing bytes.  */
+  /* We give up if the type size is not known at compile-time or the
+     type size is always compatible regardless of the buffer size.  */
   if (TREE_CODE (pointee_size_tree) != INTEGER_CST
       || TREE_INT_CST_LOW (pointee_size_tree) == 1)
     return;
@@ -3074,13 +3078,15 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     {
     case svalue_kind::SK_CONSTANT:
       {
-	const constant_svalue *cap_sval = capacity->dyn_cast_constant_svalue ();
+	const constant_svalue *cap_sval = as_a <const constant_svalue *> capacity ();
 	tree cap = cap_sval->get_constant ();
 	unsigned HOST_WIDE_INT size_diff
 	  = capacity_compatible_with_type (cap, pointee_size_tree);
 	if (size_diff != 0)
 	  {
-	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee (), capacity));
+	    ctxt->warn (new dubious_allocation_size (lhs_reg,
+                                               reg_sval->get_pointee (),
+                                               capacity));
 	  }
       }
       break;
@@ -3088,7 +3094,9 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
       {
 	if (!const_operand_in_sval_p (pointee_size_tree, capacity, m_constraints))
 	  {
-	    ctxt->warn (new dubious_allocation_size (lhs_reg, reg_sval->get_pointee (), capacity));
+	    ctxt->warn (new dubious_allocation_size (lhs_reg,
+                                               reg_sval->get_pointee (),
+                                               capacity));
 	  }
       }
       break;
@@ -4286,30 +4294,6 @@ region_model::pop_frame (tree result_lvalue,
     }
 
   unbind_region_and_descendents (frame_reg,POISON_KIND_POPPED_STACK);
-}
-
-// FIXME: How to call the call_lhs <- <return_value> on the caller context
-//        with the call site set as a stmt?
-void
-region_model::set_return (const gcall *call, region_model_context *ctxt)
-{
-  if (0)
-    {
-      tree lhs = gimple_call_lhs (call);
-      tree fndecl = gimple_call_fndecl (call);
-      tree result = DECL_RESULT (fndecl);
-      const svalue *retval = NULL;
-      if (result && TREE_TYPE (result) != void_type_node)
-          retval = get_rvalue (result, ctxt);
-
-      if (lhs && retval)
-      {
-        /* Compute result_dst_reg using RESULT_LVALUE *after* popping
-      the frame, but before poisoning pointers into the old frame.  */
-        const region *result_dst_reg = get_lvalue (lhs, ctxt);
-        set_value (result_dst_reg, retval, ctxt);
-      }
-    }
 }
 
 /* Get the number of frames in this region_model's stack.  */

@@ -3740,18 +3740,6 @@ exploded_graph::process_node (exploded_node *node)
 	    program_state::detect_leaks (state, next_state, NULL,
 					 get_ext_state (), &ctxt);
 	  }
-  // FIX ME: Other way than calling return again here?
-  // else 
-  //   {
-  //     const supernode *snode = point.get_supernode ();
-  //     if (snode->m_returning_call)
-  //     {
-  //       impl_region_model_context ctxt (*this, node,
-  //           &state, &next_state,
-  //           &uncertainty, NULL, snode->m_returning_call);
-  //       next_state.m_region_model->update_for_return_gcall (snode->m_returning_call, &ctxt);
-  //     }
-  //   }
 
 	program_point next_point (point.get_next ());
 	exploded_node *next = get_or_create_node (next_point, next_state, node);

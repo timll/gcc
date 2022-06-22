@@ -1,4 +1,4 @@
-/* { dg-additional-options "-Wno-incompatible-pointer-types -Wno-analyzer-allocation-size" } */
+/* { dg-additional-options "-Wno-incompatible-pointer-types" } */
 
 #include <stdlib.h>
 
