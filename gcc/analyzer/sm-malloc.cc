@@ -1432,6 +1432,24 @@ private:
   const char *m_funcname;
 };
 
+/* struct allocation_state : public state_machine::state.  */
+
+/* Implementation of state_machine::state::dump_to_pp vfunc
+   for allocation_state: append the API that this allocation is
+   associated with.  */
+
+void
+allocation_state::dump_to_pp (pretty_printer *pp) const
+{
+  state_machine::state::dump_to_pp (pp);
+  if (m_deallocators)
+    {
+      pp_string (pp, " (");
+      m_deallocators->dump_to_pp (pp);
+      pp_character (pp, ')');
+    }
+}
+
 /* Given a allocation_state for a deallocator_set, get the "nonnull" state
    for the corresponding allocator(s).  */
 
