@@ -2845,32 +2845,43 @@ public:
   describe_region_creation_event (const evdesc::region_creation &ev) final 
   override
   {
+    m_allocation_event = &ev;
     if (m_cst_cap)
       return ev.formatted_print ("allocated %wu bytes here",
                                  TREE_INT_CST_LOW (m_cst_cap));
     return ev.formatted_print ("allocated here");
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  label_text describe_final_event (const evdesc::final_event &ev) final
+  override
   {
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
-    return ev.formatted_print ("assigned to %qT here; %<sizeof(%T)%> is %qE",
+    if (m_allocation_event)
+      return ev.formatted_print ("assigned to %qT here; %<sizeof(%T)%> is %qE",
                                m_lhs->get_type (), pointee_type,
                                size_in_bytes (pointee_type));
+    else
+      if (m_cst_cap)
+        return ev.formatted_print ("allocated %wu bytes and assigned to %qT here; %<sizeof(%T)%> is %qE",
+                                   TREE_INT_CST_LOW (m_cst_cap),
+                                   m_lhs->get_type (), pointee_type,
+                                   size_in_bytes (pointee_type));
+      else
+        return ev.formatted_print ("allocated and assigned to %qT here; %<sizeof(%T)%> is %qE",
+                                   m_lhs->get_type (), pointee_type,
+                                   size_in_bytes (pointee_type));
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
   {
-    if (m_lhs)
-      interest->add_region_creation (m_lhs);
-    if (m_rhs)
-      interest->add_region_creation (m_rhs);
+    interest->add_region_creation (m_rhs);
   }
 
 private:
   const region *m_lhs;
   const region *m_rhs;
   const tree m_cst_cap;
+  const evdesc::region_creation *m_allocation_event;
 };
 
 /* Return the trailing bytes on dubious allocation sizes.  */
