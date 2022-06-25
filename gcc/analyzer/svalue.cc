@@ -1123,6 +1123,7 @@ unaryop_svalue::dump_to_pp (pretty_printer *pp, bool simple) const
 void
 unaryop_svalue::accept (visitor *v) const
 {
+
   v->visit_unaryop_svalue (this);
   m_arg->accept (v);
 }

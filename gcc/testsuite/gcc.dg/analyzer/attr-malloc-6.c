@@ -1,4 +1,3 @@
-/* { dg-additional-options -Wno-analyzer-allocation-size } */
 /* Adapted from gcc.dg/Wmismatched-dealloc.c.  */
 
 #define A(...) __attribute__ ((malloc (__VA_ARGS__)))
