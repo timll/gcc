@@ -2271,8 +2271,8 @@ region_model::get_rvalue_1 (path_var pv, region_model_context *ctxt) const
       }
     case OBJ_TYPE_REF:
       {
-        tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
-        return get_rvalue (expr, ctxt);
+	tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
+	return get_rvalue (expr, ctxt);
       }
     }
 }
@@ -2813,7 +2813,7 @@ public:
   {}
 
   dubious_allocation_size (const region *lhs, const region *rhs, 
-                           tree cst_cap)
+			   tree cst_cap)
   : m_lhs(lhs), m_rhs(rhs), m_cst_cap(cst_cap)
   {}
 
@@ -2847,8 +2847,8 @@ public:
   {
     m_allocation_event = &ev;
     if (m_cst_cap)
-      return ev.formatted_print ("allocated %wu bytes here",
-                                 TREE_INT_CST_LOW (m_cst_cap));
+      return ev.formatted_print ("allocated %<%wu%> bytes here",
+				 TREE_INT_CST_LOW (m_cst_cap));
     return ev.formatted_print ("allocated here");
   }
 
@@ -2858,18 +2858,20 @@ public:
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
     if (m_allocation_event)
       return ev.formatted_print ("assigned to %qT here; %<sizeof(%T)%> is %qE",
-                               m_lhs->get_type (), pointee_type,
-                               size_in_bytes (pointee_type));
+			       m_lhs->get_type (), pointee_type,
+			       size_in_bytes (pointee_type));
     else
       if (m_cst_cap)
-        return ev.formatted_print ("allocated %wu bytes and assigned to %qT here; %<sizeof(%T)%> is %qE",
-                                   TREE_INT_CST_LOW (m_cst_cap),
-                                   m_lhs->get_type (), pointee_type,
-                                   size_in_bytes (pointee_type));
+	return ev.formatted_print ("allocated %<%wu%> bytes and assigned to"
+				   " %qT here; %<sizeof(%T)%> is %qE",
+				   TREE_INT_CST_LOW (m_cst_cap),
+				   m_lhs->get_type (), pointee_type,
+				   size_in_bytes (pointee_type));
       else
-        return ev.formatted_print ("allocated and assigned to %qT here; %<sizeof(%T)%> is %qE",
-                                   m_lhs->get_type (), pointee_type,
-                                   size_in_bytes (pointee_type));
+	return ev.formatted_print ("allocated and assigned to %qT here;"
+				   " %<sizeof(%T)%> is %qE",
+				   m_lhs->get_type (), pointee_type,
+				   size_in_bytes (pointee_type));
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
@@ -3022,20 +3024,20 @@ struct_or_union_with_inheritance_p (tree maybe_struct)
     {
       tree iter = TYPE_FIELDS (maybe_struct);
       if (iter == NULL_TREE)
-        return false;
+	return false;
       if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
-        return true;
+	return true;
 
       tree last_field;
       while (iter != NULL_TREE)
-        {
-          last_field = iter;
-          iter = DECL_CHAIN (iter);
-        }
+	{
+	  last_field = iter;
+	  iter = DECL_CHAIN (iter);
+	}
 
       if (last_field != NULL_TREE 
-          && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
-        return true;
+	  && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
+	return true;
     }
   return false;
 }
@@ -3047,16 +3049,16 @@ is_any_cast_p (const gimple *stmt)
 {
   if (const gassign *assign = dyn_cast<const gassign *>(stmt))
     return gimple_assign_cast_p (assign) 
-          || (gimple_num_ops (assign) == 2
-              && !pending_diagnostic::same_tree_p (
-                                    TREE_TYPE(gimple_assign_lhs (assign)),
-                                    TREE_TYPE (gimple_assign_rhs1 (assign))));
+	  || (gimple_num_ops (assign) == 2
+	      && !pending_diagnostic::same_tree_p (
+				    TREE_TYPE(gimple_assign_lhs (assign)),
+				    TREE_TYPE (gimple_assign_rhs1 (assign))));
   else if (const gcall *call = dyn_cast<const gcall *>(stmt))
     {
       tree lhs = gimple_call_lhs (call);
       return lhs != NULL_TREE && !pending_diagnostic::same_tree_p (
-                                    TREE_TYPE(gimple_call_lhs (call)),
-                                    gimple_call_return_type (call));
+				    TREE_TYPE(gimple_call_lhs (call)),
+				    gimple_call_return_type (call));
     }
 
   return false;
@@ -3068,7 +3070,7 @@ is_any_cast_p (const gimple *stmt)
 
 void
 region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
-			                           region_model_context *ctxt) const
+						   region_model_context *ctxt) const
 {
   if (!ctxt || ctxt->get_stmt () == NULL)
     return;
@@ -3109,21 +3111,21 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     {
     case svalue_kind::SK_CONSTANT:
       {
-        const constant_svalue *cst_cap_sval 
-                = as_a <const constant_svalue *> (capacity);
-        tree cst_cap = cst_cap_sval->get_constant ();
-        unsigned HOST_WIDE_INT size_diff
-          = capacity_compatible_with_type (cst_cap, pointee_size_tree);
-        if (size_diff != 0)
-          ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
-                                                   cst_cap));
+	const constant_svalue *cst_cap_sval 
+		= as_a <const constant_svalue *> (capacity);
+	tree cst_cap = cst_cap_sval->get_constant ();
+	unsigned HOST_WIDE_INT size_diff
+	  = capacity_compatible_with_type (cst_cap, pointee_size_tree);
+	if (size_diff != 0)
+	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
+						   cst_cap));
       }
       break;
     default:
       {
-        size_visitor v(pointee_size_tree, capacity, m_constraints);
-        if (!v.get_result ())
-          ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
+	size_visitor v(pointee_size_tree, capacity, m_constraints);
+	if (!v.get_result ())
+	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
       }
       break;
     }
@@ -6311,10 +6313,10 @@ test_widening_constraints ()
        {i_23: (WIDENED (at phi, 0, 1) + 1); WIDENED <= 255}
      i_11 = PHI(); merge with state at phi above
        {i_11: WIDENED (at phi, 0, 1); WIDENED <= 256}
-         [changing meaning of "WIDENED" here]
+	 [changing meaning of "WIDENED" here]
      if (i_11 <= 255)
-        T: {i_11: WIDENED (at phi, 0, 1); WIDENED <= 255}; cache hit
-        F: {i_11: 256}
+	T: {i_11: WIDENED (at phi, 0, 1); WIDENED <= 255}; cache hit
+	F: {i_11: 256}
  */
 
 static void
@@ -6577,18 +6579,18 @@ test_mem_ref ()
    from data-model-1.c, which looks like this at the gimple level:
        # __analyzer_eval (a[3] == 42); [should be UNKNOWN]
        int *_1 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       int _2 = *_1;             # MEM_REF
+       int _2 = *_1;	     # MEM_REF
        _Bool _3 = _2 == 42;
        int _4 = (int) _3;
        __analyzer_eval (_4);
 
        # a[3] = 42;
        int *_5 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       *_5 = 42;                 # MEM_REF
+       *_5 = 42;		 # MEM_REF
 
        # __analyzer_eval (a[3] == 42); [should be TRUE]
        int *_6 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       int _7 = *_6;             # MEM_REF
+       int _7 = *_6;	     # MEM_REF
        _Bool _8 = _7 == 42;
        int _9 = (int) _8;
        __analyzer_eval (_9);  */
