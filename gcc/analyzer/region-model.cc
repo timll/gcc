@@ -2886,17 +2886,20 @@ private:
   const evdesc::region_creation *m_allocation_event;
 };
 
-/* Return the trailing bytes on dubious allocation sizes.  */
+/* Return true on dubious allocation sizes for constant sizes.  */
 
-static unsigned HOST_WIDE_INT 
-capacity_compatible_with_type (tree cst, tree pointee_size_tree)
+static bool 
+capacity_compatible_with_type (tree cst, tree pointee_size_tree,
+                               bool is_struct)
 {
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
   if (pointee_size == 0)
     return 0;
   unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
 
-  return alloc_size % pointee_size;
+  if (is_struct)
+    return alloc_size >= pointee_size;
+  return alloc_size % pointee_size == 0;
 }
 
 /* Checks whether SVAL could be a multiple of SIZE_CST.
@@ -3018,27 +3021,25 @@ private:
    pattern, where the last field is an array without a specified size.  */
 
 static bool
-struct_or_union_with_inheritance_p (tree maybe_struct)
+struct_or_union_with_inheritance_p (tree struc)
 {
-  if (RECORD_OR_UNION_TYPE_P (maybe_struct))
+  tree iter = TYPE_FIELDS (struc);
+  if (iter == NULL_TREE)
+	  return false;
+  if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
+	  return true;
+
+  tree last_field;
+  while (iter != NULL_TREE)
     {
-      tree iter = TYPE_FIELDS (maybe_struct);
-      if (iter == NULL_TREE)
-	return false;
-      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (iter)))
-	return true;
-
-      tree last_field;
-      while (iter != NULL_TREE)
-	{
-	  last_field = iter;
-	  iter = DECL_CHAIN (iter);
-	}
-
-      if (last_field != NULL_TREE 
-	  && COMPLETE_OR_UNBOUND_ARRAY_TYPE_P (TREE_TYPE (last_field)))
-	return true;
+      last_field = iter;
+      iter = DECL_CHAIN (iter);
     }
+
+  if (last_field != NULL_TREE
+      && TREE_CODE (TREE_TYPE (last_field)) == ARRAY_TYPE)
+	  return true;
+
   return false;
 }
 
@@ -3095,7 +3096,8 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 
   /* Bail out early on pointers to structs where we can 
      not deduce whether the buffer size is compatible.  */
-  if (struct_or_union_with_inheritance_p (pointee_type))
+  bool is_struct = RECORD_OR_UNION_TYPE_P (pointee_type);
+  if (is_struct && struct_or_union_with_inheritance_p (pointee_type))
     return;
 
   tree pointee_size_tree = size_in_bytes(pointee_type);
@@ -3114,20 +3116,22 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	const constant_svalue *cst_cap_sval 
 		= as_a <const constant_svalue *> (capacity);
 	tree cst_cap = cst_cap_sval->get_constant ();
-	unsigned HOST_WIDE_INT size_diff
-	  = capacity_compatible_with_type (cst_cap, pointee_size_tree);
-	if (size_diff != 0)
+        if (!capacity_compatible_with_type (cst_cap, pointee_size_tree,
+                                            is_struct))
 	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
 						   cst_cap));
       }
       break;
     default:
       {
-	size_visitor v(pointee_size_tree, capacity, m_constraints);
-	if (!v.get_result ())
-	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
-      }
+        if (!is_struct)
+          {
+            size_visitor v(pointee_size_tree, capacity, m_constraints);
+            if (!v.get_result ())
+              ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
+          }
       break;
+      }
     }
 }
 
