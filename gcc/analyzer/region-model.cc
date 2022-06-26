@@ -2890,7 +2890,7 @@ private:
 
 static bool 
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
-                               bool is_struct)
+			       bool is_struct)
 {
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
   if (pointee_size == 0)
@@ -2951,7 +2951,7 @@ public:
     const svalue *arg = sval->get_arg ();
     arg->accept (this);
     if (result_set.contains (arg))
-	result_set.add (sval);
+      result_set.add (sval);
   }
 
   void visit_binop_svalue (const binop_svalue *sval) final override
@@ -3124,20 +3124,20 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	const constant_svalue *cst_cap_sval 
 		= as_a <const constant_svalue *> (capacity);
 	tree cst_cap = cst_cap_sval->get_constant ();
-        if (!capacity_compatible_with_type (cst_cap, pointee_size_tree,
-                                            is_struct))
+	if (!capacity_compatible_with_type (cst_cap, pointee_size_tree,
+					    is_struct))
 	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
 						   cst_cap));
       }
       break;
     default:
       {
-        if (!is_struct)
-          {
-            size_visitor v(pointee_size_tree, capacity, m_constraints);
-            if (!v.get_result ())
-              ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
-          }
+	if (!is_struct)
+	  {
+	    size_visitor v(pointee_size_tree, capacity, m_constraints);
+	    if (!v.get_result ())
+	      ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
+	  }
       break;
       }
     }
