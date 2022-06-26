@@ -2944,18 +2944,14 @@ public:
   void visit_unaryop_svalue (const unaryop_svalue *sval) 
   {
     const svalue *arg = sval->get_arg ();
-    arg->accept (this);
     if (result_set.contains (arg))
-	result_set.add (sval);
+	    result_set.add (sval);
   }
 
   void visit_binop_svalue (const binop_svalue *sval) final override
   {
     const svalue *arg0 = sval->get_arg0 ();
     const svalue *arg1 = sval->get_arg1 ();
-
-    arg0->accept (this);
-    arg1->accept (this);
     if (sval->get_op () == MULT_EXPR)
       {
 	if (result_set.contains (arg0) || result_set.contains (arg1))
@@ -2970,14 +2966,12 @@ public:
 
   void visit_repeated_svalue (const repeated_svalue *sval) 
   {
-    sval->get_inner_svalue ()->accept(this);
     if (result_set.contains (sval->get_inner_svalue ()))
       result_set.add (sval);
   }
 
   void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
   {
-    sval->get_arg ()->accept (this);
     if (result_set.contains (sval->get_arg ()))
       result_set.add (sval);
   }
@@ -2987,8 +2981,6 @@ public:
     const svalue *base = sval->get_base_svalue ();
     const svalue *iter = sval->get_iter_svalue ();
 
-    base->accept(this);
-    iter->accept(this);
     if (result_set.contains (base) && result_set.contains (iter))
       result_set.add (sval);
   }
