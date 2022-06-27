@@ -2809,12 +2809,12 @@ class dubious_allocation_size
 {
 public:
   dubious_allocation_size (const region *lhs, const region *rhs)
-  : m_lhs(lhs), m_rhs(rhs), m_cst_cap(NULL_TREE)
+  : m_lhs(lhs), m_rhs(rhs), m_expr(NULL_TREE)
   {}
 
   dubious_allocation_size (const region *lhs, const region *rhs, 
-			   tree cst_cap)
-  : m_lhs(lhs), m_rhs(rhs), m_cst_cap(cst_cap)
+			   tree expr)
+  : m_lhs(lhs), m_rhs(rhs), m_expr(expr)
   {}
 
   const char *get_kind () const final override 
@@ -2846,9 +2846,8 @@ public:
   override
   {
     m_allocation_event = &ev;
-    if (m_cst_cap)
-      return ev.formatted_print ("allocated %<%wu%> bytes here",
-				 TREE_INT_CST_LOW (m_cst_cap));
+    if (m_expr)
+      return ev.formatted_print ("allocated %qE bytes here", m_expr);
     return ev.formatted_print ("allocated here");
   }
 
@@ -2861,10 +2860,10 @@ public:
 			       m_lhs->get_type (), pointee_type,
 			       size_in_bytes (pointee_type));
     else
-      if (m_cst_cap)
-	return ev.formatted_print ("allocated %<%wu%> bytes and assigned to"
+      if (m_expr)
+	return ev.formatted_print ("allocated %qE bytes and assigned to"
 				   " %qT here; %<sizeof(%T)%> is %qE",
-				   TREE_INT_CST_LOW (m_cst_cap),
+				   m_expr,
 				   m_lhs->get_type (), pointee_type,
 				   size_in_bytes (pointee_type));
       else
@@ -2882,7 +2881,7 @@ public:
 private:
   const region *m_lhs;
   const region *m_rhs;
-  const tree m_cst_cap;
+  const tree m_expr;
   const evdesc::region_creation *m_allocation_event;
 };
 
@@ -2949,7 +2948,6 @@ public:
   void visit_unaryop_svalue (const unaryop_svalue *sval) 
   {
     const svalue *arg = sval->get_arg ();
-    arg->accept (this);
     if (result_set.contains (arg))
       result_set.add (sval);
   }
@@ -2959,8 +2957,6 @@ public:
     const svalue *arg0 = sval->get_arg0 ();
     const svalue *arg1 = sval->get_arg1 ();
 
-    arg0->accept (this);
-    arg1->accept (this);
     if (sval->get_op () == MULT_EXPR)
       {
 	if (result_set.contains (arg0) || result_set.contains (arg1))
@@ -2992,8 +2988,6 @@ public:
     const svalue *base = sval->get_base_svalue ();
     const svalue *iter = sval->get_iter_svalue ();
 
-    base->accept(this);
-    iter->accept(this);
     if (result_set.contains (base) && result_set.contains (iter))
       result_set.add (sval);
   }
@@ -3136,7 +3130,10 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	  {
 	    size_visitor v(pointee_size_tree, capacity, m_constraints);
 	    if (!v.get_result ())
-	      ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg));
+      {
+        tree expr = get_representative_tree (capacity);
+	      ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg, expr));
+      }
 	  }
       break;
       }

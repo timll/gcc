@@ -1,10 +1,11 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 /* Tests with constant buffer sizes.  */
 
 void test_1 (void)
 {
-  short *ptr = malloc (21 * sizeof(short));
+  short *ptr = malloc (21 * sizeof (short));
   free (ptr);
 }
 
@@ -27,37 +28,75 @@ void test_3 (void)
 void test_4 (void)
 {
   void *ptr = malloc (21 * sizeof (short)); /* { dg-message } */
-  int *iptr = (int *)ptr; /* { dg-line assign } */
+  int *iptr = (int *)ptr; /* { dg-line assign4 } */
   free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } assign } */
-  /* { dg-message "" "" { target *-*-* } assign } */
+  /* { dg-warning "" "" { target *-*-* } assign4 } */
+  /* { dg-message "" "" { target *-*-* } assign4 } */
 }
-
-struct s {
-  int i;
-};
 
 void test_5 (void)
 {
-  struct s *ptr = malloc (5 * sizeof (struct s));
-  free (ptr);
+  int user_input;
+  scanf("%i", &user_input);
+  int n;
+  if (user_input == 0)
+    n = 21 * sizeof (short);
+  else
+    n = 42 * sizeof (short);
+  void *ptr = malloc (n);
+  short *sptr = (short *)ptr;
+  free (sptr);
 }
 
 void test_6 (void)
 {
-  long *ptr = malloc (5 * sizeof (struct s));  /* { dg-line malloc6 } */
-  free (ptr);
+  int user_input;
+  scanf("%i", &user_input);
+  int n;
+  if (user_input == 0)
+    n = 21 * sizeof (short);
+  else
+    n = 42 * sizeof (short);
+  void *ptr = malloc (n); /* { dg-message } */
+  int *iptr = (int *)ptr; /* { dg-line assign6 } */
+  free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc6 } */
-  /* { dg-message "" "" { target *-*-* } malloc6 } */
+  /* { dg-warning "" "" { target *-*-* } assign6 } */
+  /* { dg-message "" "" { target *-*-* } assign6 } */
 }
 
 void test_7 (void)
 {
-  char buf[2];
-  int *ptr = (int *)buf; /* { dg-line malloc7 } */
+  int user_input;
+  scanf("%i", &user_input);
+  int n;
+  if (user_input == 0)
+    n = 1;
+  else if (user_input == 2)
+    n = 5;
+  else
+    n = 7;
+  /* n is an unknown_svalue at this point.  */
+  void *ptr = malloc (n);
+  int *iptr = (int *)ptr;
+  free (iptr);
+}
 
-  /* { dg-warning "" "" { target *-*-* } malloc7 } */
-  /* { dg-message "" "" { target *-*-* } malloc7 } */
+void *create_buffer(int n)
+{
+  return malloc(n);
+}
+
+void test_8(void) 
+{
+  int *buf = create_buffer(4 * sizeof (int));
+  free (buf);
+}
+
+void test_9(void) 
+{
+  // FIXME
+  int *buf = create_buffer(42); /* { dg-warning "" "" { xfail *-*-* } } */
+  free (buf);
 }

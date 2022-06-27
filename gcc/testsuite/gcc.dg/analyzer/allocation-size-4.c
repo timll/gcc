@@ -1,92 +1,58 @@
-#include <stddef.h>
 #include <stdlib.h>
-#include <stdio.h>
 
-/* Flow warnings */
+/* Tests related to structs.  */
 
-void *create_buffer(int n)
+struct base {
+  int i;
+};
+
+struct sub {
+  struct base b;
+  int j;
+};
+
+struct var_len {
+  int i;
+  char arr[];
+};
+
+
+void test_1 (void)
 {
-  return malloc(n);
+  struct base *ptr = malloc (5 * sizeof (struct base));
+  free (ptr);
 }
 
-void test_1(void) 
+void test_2 (void)
 {
-  // FIXME
-  int *buf = create_buffer(42); /* { dg-warning "" "" { xfail *-*-* } } */
-  free (buf);
+  long *ptr = malloc (5 * sizeof (struct base));  /* { dg-line malloc2 } */
+  free (ptr);
+
+  /* { dg-warning "" "" { target *-*-* } malloc2 } */
+  /* { dg-message "" "" { target *-*-* } malloc2 } */
 }
 
-void test_2(void) 
+void test_3 (void)
 {
-  void *buf = create_buffer(42); /* { dg-message } */
-  int *ibuf = buf; /* { dg-line assign2 } */
-  free (ibuf);
-
-  /* { dg-warning "" "" { target *-*-* } assign2 } */
-  /* { dg-message "" "" { target *-*-* } assign2 } */
+  /* Even though 10 bytes is not a multiple of 4, we do not warn to prevent
+     a false positive in case s is the base struct of a struct inheritance.  */
+  struct base *ptr = malloc (10);
+  free (ptr);
 }
 
-void test_3(void)
+void test_4 (void)
 {
-  void *buf = malloc(42); /* { dg-message } */
-  if (buf != NULL) /* { dg-message } */
-    {
-      int *ibuf = buf; /* { dg-line assign3 } */
-      free (ibuf);
-    }
-
-  /* { dg-warning "" "" { target *-*-* } assign3 } */
-  /* { dg-message "" "" { target *-*-* } assign3 } */
+  struct var_len *ptr = malloc (10);
+  free (ptr);
 }
 
-void test_4(void)
+void test_5 (void)
 {
-  int n;
-  scanf("%i", &n);
+  /* For constant sizes, we warn if the buffer
+     is too small to hold a single struct.  */
+  struct base *ptr = malloc (2);  /* { dg-line malloc5 } */
+  free (ptr);
 
-  int size;
-  if (n == 0)
-    size = 1;
-  else if (n == 1)
-    size = 10;
-  else
-    size = 20;
-
-  int *buf = malloc(size); // Size should be 'unknown' at this point
-  free (buf);
-}
-
-void test_5(void)
-{
-  int n;
-  scanf("%i", &n);
-
-  int size;
-  if (n == 0)
-    size = 2;
-  else
-    size = 10;
-
-  short *buf = malloc(size); // Size should be widened to 2 and 10, both fit
-  free (buf);
-}
-
-
-void test_6(void)
-{
-  int n;
-  scanf("%i", &n);
-
-  int size;
-  if (n == 0)
-    size = 1;
-  else
-    size = 10;
-
-  short *buf = malloc(size); /* { dg-line malloc6 } */
-  free (buf);
-  
-
-  /* { dg-warning "" "" { target *-*-* } malloc6 } */
-  /* { dg-message "" "" { target *-*-* } malloc6 } */
+  /* { dg-warning "" "" { target *-*-* } malloc5 } */
+  /* { dg-message "" "" { target *-*-* } malloc5 } */
 }
