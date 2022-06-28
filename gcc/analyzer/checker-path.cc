@@ -307,10 +307,10 @@ region_creation_event::get_desc (bool can_colorize) const
   if (m_pending_diagnostic)
     {
       label_text custom_desc
-            = m_pending_diagnostic->describe_region_creation_event 
-                (evdesc::region_creation(can_colorize, m_reg));
+	    = m_pending_diagnostic->describe_region_creation_event
+		(evdesc::region_creation(can_colorize, m_reg));
       if (custom_desc.m_buffer)
-        return custom_desc;
+	return custom_desc;
     }
 
 
@@ -678,7 +678,7 @@ start_cfg_edge_event::get_desc (bool can_colorize) const
       |     ~
       |     |
       |     (1) following 'false' branch (when 'ptr' is non-NULL)...
-                                          ^^^^^^^^^^^^^^^^^^^^^^
+					  ^^^^^^^^^^^^^^^^^^^^^^
 
    In the above example, this function would generate the highlighted
    string: "when 'ptr' is non-NULL".

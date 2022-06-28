@@ -2809,17 +2809,17 @@ class dubious_allocation_size
 {
 public:
   dubious_allocation_size (const region *lhs, const region *rhs)
-  : m_lhs(lhs), m_rhs(rhs), m_expr(NULL_TREE)
+  : m_lhs (lhs), m_rhs (rhs), m_expr (NULL_TREE)
   {}
 
-  dubious_allocation_size (const region *lhs, const region *rhs, 
+  dubious_allocation_size (const region *lhs, const region *rhs,
 			   tree expr)
-  : m_lhs(lhs), m_rhs(rhs), m_expr(expr)
+  : m_lhs (lhs), m_rhs (rhs), m_expr (expr)
   {}
 
-  const char *get_kind () const final override 
-  { 
-    return "dubious_allocation_size"; 
+  const char *get_kind () const final override
+  {
+    return "dubious_allocation_size";
   }
 
   bool operator== (const dubious_allocation_size &other) const
@@ -2841,8 +2841,8 @@ public:
 	       "allocated buffer size is not a multiple of the pointee's size");
   }
 
-  label_text 
-  describe_region_creation_event (const evdesc::region_creation &ev) final 
+  label_text
+  describe_region_creation_event (const evdesc::region_creation &ev) final
   override
   {
     m_allocation_event = &ev;
@@ -2856,19 +2856,19 @@ public:
   {
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
     if (m_allocation_event)
-      return ev.formatted_print ("assigned to %qT here; %<sizeof(%T)%> is %qE",
+      return ev.formatted_print ("assigned to %qT here; %<sizeof (%T)%> is %qE",
 			       m_lhs->get_type (), pointee_type,
 			       size_in_bytes (pointee_type));
     else
       if (m_expr)
 	return ev.formatted_print ("allocated %qE bytes and assigned to"
-				   " %qT here; %<sizeof(%T)%> is %qE",
+				   " %qT here; %<sizeof (%T)%> is %qE",
 				   m_expr,
 				   m_lhs->get_type (), pointee_type,
 				   size_in_bytes (pointee_type));
       else
 	return ev.formatted_print ("allocated and assigned to %qT here;"
-				   " %<sizeof(%T)%> is %qE",
+				   " %<sizeof (%T)%> is %qE",
 				   m_lhs->get_type (), pointee_type,
 				   size_in_bytes (pointee_type));
   }
@@ -2887,7 +2887,7 @@ private:
 
 /* Return true on dubious allocation sizes for constant sizes.  */
 
-static bool 
+static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 			       bool is_struct)
 {
@@ -2902,26 +2902,26 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 }
 
 /* Checks whether SVAL could be a multiple of SIZE_CST.
-  
+
    It works by visiting all svalues inside SVAL until it reaches
-   atomic nodes. From those, it goes back up again and adds each
+   atomic nodes.  From those, it goes back up again and adds each
    node that might be a multiple of SIZE_CST to the RESULT_SET.  */
 
 class size_visitor : public visitor
 {
 public:
-  size_visitor(tree size_cst, const svalue *sval, constraint_manager *cm) 
-  : m_size_cst(size_cst), m_sval(sval), m_cm(cm)
+  size_visitor (tree size_cst, const svalue *sval, constraint_manager *cm)
+  : m_size_cst (size_cst), m_sval (sval), m_cm (cm)
   {
-    sval->accept(this);
+    sval->accept (this);
   }
 
   bool get_result ()
   {
-    return result_set.contains(m_sval);
+    return result_set.contains (m_sval);
   }
 
-  void 
+  void
   visit_constant_svalue (const constant_svalue *sval) final override
   {
     unsigned HOST_WIDE_INT sval_int
@@ -2931,21 +2931,21 @@ public:
       result_set.add (sval);
   }
 
-  void 
-  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED) 
+  void
+  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     result_set.add (sval);
   }
 
-  void 
-  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED) 
+  void
+  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     result_set.add (sval);
   }
-  
-  void visit_unaryop_svalue (const unaryop_svalue *sval) 
+
+  void visit_unaryop_svalue (const unaryop_svalue *sval)
   {
     const svalue *arg = sval->get_arg ();
     if (result_set.contains (arg))
@@ -2969,9 +2969,9 @@ public:
       }
   }
 
-  void visit_repeated_svalue (const repeated_svalue *sval) 
+  void visit_repeated_svalue (const repeated_svalue *sval)
   {
-    sval->get_inner_svalue ()->accept(this);
+    sval->get_inner_svalue ()->accept (this);
     if (result_set.contains (sval->get_inner_svalue ()))
       result_set.add (sval);
   }
@@ -2992,20 +2992,20 @@ public:
       result_set.add (sval);
   }
 
-  void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED) 
+  void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     if (m_cm->get_equiv_class_by_svalue (sval, NULL))
       result_set.add (sval);
   }
 
-  void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED) 
+  void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     result_set.add (sval);
   }
 
-  void visit_const_fn_result_svalue (const const_fn_result_svalue 
+  void visit_const_fn_result_svalue (const const_fn_result_svalue
 				      *sval ATTRIBUTE_UNUSED) final override
   {
     result_set.add (sval);
@@ -3051,37 +3051,36 @@ static bool
 is_any_cast_p (const gimple *stmt)
 {
   if (const gassign *assign = dyn_cast<const gassign *>(stmt))
-    return gimple_assign_cast_p (assign) 
+    return gimple_assign_cast_p (assign)
 	  || (gimple_num_ops (assign) == 2
 	      && !pending_diagnostic::same_tree_p (
-				    TREE_TYPE(gimple_assign_lhs (assign)),
+				    TREE_TYPE (gimple_assign_lhs (assign)),
 				    TREE_TYPE (gimple_assign_rhs1 (assign))));
   else if (const gcall *call = dyn_cast<const gcall *>(stmt))
     {
       tree lhs = gimple_call_lhs (call);
       return lhs != NULL_TREE && !pending_diagnostic::same_tree_p (
-				    TREE_TYPE(gimple_call_lhs (call)),
+				    TREE_TYPE (gimple_call_lhs (call)),
 				    gimple_call_return_type (call));
     }
 
   return false;
 }
 
-/* On pointer assignments, check whether the buffer size of 
+/* On pointer assignments, check whether the buffer size of
    RHS_SVAL is compatible with the type of the LHS_REG.
    Use a non-null CTXT to report allocation size warnings.  */
 
 void
 region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
-						   region_model_context *ctxt) const
+				 region_model_context *ctxt) const
 {
   if (!ctxt || ctxt->get_stmt () == NULL)
     return;
-  /* Only report warnings on assignments that actually change the
-     type. Prevents duplicate warnings after a dubious assignment. */
+  /* Only report warnings on assignments that actually change the type.  */
   if (!is_any_cast_p (ctxt->get_stmt ()))
     return;
-  
+
   const region_svalue *reg_sval = dyn_cast <const region_svalue *> (rhs_sval);
   if (!reg_sval)
     return;
@@ -3092,11 +3091,11 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 
   tree pointee_type = TREE_TYPE (pointer_type);
   /* Make sure that the type on the left-hand size actually has a size.  */
-  if (pointee_type == NULL_TREE || VOID_TYPE_P (pointee_type) 
+  if (pointee_type == NULL_TREE || VOID_TYPE_P (pointee_type)
       || TYPE_SIZE_UNIT (pointee_type) == NULL_TREE)
     return;
 
-  /* Bail out early on pointers to structs where we can 
+  /* Bail out early on pointers to structs where we can
      not deduce whether the buffer size is compatible.  */
   bool is_struct = RECORD_OR_UNION_TYPE_P (pointee_type);
   if (is_struct && struct_or_union_with_inheritance_p (pointee_type))
@@ -3115,7 +3114,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     {
     case svalue_kind::SK_CONSTANT:
       {
-	const constant_svalue *cst_cap_sval 
+	const constant_svalue *cst_cap_sval
 		= as_a <const constant_svalue *> (capacity);
 	tree cst_cap = cst_cap_sval->get_constant ();
 	if (!capacity_compatible_with_type (cst_cap, pointee_size_tree,
@@ -3130,10 +3129,11 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	  {
 	    size_visitor v(pointee_size_tree, capacity, m_constraints);
 	    if (!v.get_result ())
-      {
-        tree expr = get_representative_tree (capacity);
-	      ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg, expr));
-      }
+	      {
+		 tree expr = get_representative_tree (capacity);
+		 ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
+		 					  expr));
+	      }
 	  }
       break;
       }
@@ -3151,7 +3151,7 @@ region_model::set_value (const region *lhs_reg, const svalue *rhs_sval,
   gcc_assert (lhs_reg);
   gcc_assert (rhs_sval);
 
-  check_region_size(lhs_reg, rhs_sval, ctxt);
+  check_region_size (lhs_reg, rhs_sval, ctxt);
 
   check_region_for_write (lhs_reg, ctxt);
 
@@ -4063,7 +4063,7 @@ region_model::update_for_return_gcall (const gcall *call_stmt,
   pop_frame (lhs, NULL, ctxt);
 }
 
-/* Extract calling information from the superedge and update the model for the 
+/* Extract calling information from the superedge and update the model for the
    call  */
 
 void
@@ -4074,7 +4074,7 @@ region_model::update_for_call_superedge (const call_superedge &call_edge,
   update_for_gcall (call_stmt, ctxt, call_edge.get_callee_function ());
 }
 
-/* Extract calling information from the return superedge and update the model 
+/* Extract calling information from the return superedge and update the model
    for the returning call */
 
 void

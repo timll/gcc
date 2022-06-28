@@ -64,7 +64,7 @@ struct event_desc
 struct region_creation : public event_desc
 {
   region_creation (bool colorize, const region *reg)
-  : event_desc (colorize), m_reg(reg)
+  : event_desc (colorize), m_reg (reg)
   {}
 
   const region *m_reg;
@@ -229,7 +229,7 @@ class pending_diagnostic
 
   /* Precision-of-wording vfunc for describing a region creation event
      triggered by the mark_interesting_stuff vfunc.  */
-  virtual label_text 
+  virtual label_text
   describe_region_creation_event (const evdesc::region_creation &)
   {
     /* Default no-op implementation.  */

@@ -662,11 +662,11 @@ class region_model
 			      rejected_constraint **out);
 
   void update_for_gcall (const gcall *call_stmt,
-                         region_model_context *ctxt,
-                         function *callee = NULL);
+			 region_model_context *ctxt,
+			 function *callee = NULL);
   
   void update_for_return_gcall (const gcall *call_stmt,
-                                region_model_context *ctxt);
+				region_model_context *ctxt);
 
   const region *push_frame (function *fun, const vec<const svalue *> *arg_sids,
 			    region_model_context *ctxt);
@@ -858,7 +858,7 @@ class region_model
   void check_region_for_read (const region *src_reg,
 			      region_model_context *ctxt) const;
   void check_region_size (const region *lhs_reg, const svalue *rhs_sval,
-                          region_model_context *ctxt) const;
+			  region_model_context *ctxt) const;
 
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
