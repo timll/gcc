@@ -3101,7 +3101,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
   if (is_struct && struct_or_union_with_inheritance_p (pointee_type))
     return;
 
-  tree pointee_size_tree = size_in_bytes(pointee_type);
+  tree pointee_size_tree = size_in_bytes (pointee_type);
   /* We give up if the type size is not known at compile-time or the
      type size is always compatible regardless of the buffer size.  */
   if (TREE_CODE (pointee_size_tree) != INTEGER_CST
@@ -3127,12 +3127,12 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
       {
 	if (!is_struct)
 	  {
-	    size_visitor v(pointee_size_tree, capacity, m_constraints);
+	    size_visitor v (pointee_size_tree, capacity, m_constraints);
 	    if (!v.get_result ())
 	      {
-		 tree expr = get_representative_tree (capacity);
-		 ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
-		 					  expr));
+		tree expr = get_representative_tree (capacity);
+		ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
+			    expr));
 	      }
 	  }
       break;
