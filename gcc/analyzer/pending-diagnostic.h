@@ -1,4 +1,3 @@
-
 /* Classes for analyzer diagnostics.
    Copyright (C) 2019-2022 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.

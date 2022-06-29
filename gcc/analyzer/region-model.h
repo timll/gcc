@@ -662,11 +662,11 @@ class region_model
 			      rejected_constraint **out);
 
   void update_for_gcall (const gcall *call_stmt,
-			 region_model_context *ctxt,
-			 function *callee = NULL);
+                         region_model_context *ctxt,
+                         function *callee = NULL);
   
   void update_for_return_gcall (const gcall *call_stmt,
-				region_model_context *ctxt);
+                                region_model_context *ctxt);
 
   const region *push_frame (function *fun, const vec<const svalue *> *arg_sids,
 			    region_model_context *ctxt);

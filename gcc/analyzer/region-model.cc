@@ -73,8 +73,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "ssa-iterators.h"
 #include "calls.h"
-#include "print-tree.h"
-#include "gimple-pretty-print.h"
 #include "is-a.h"
 
 #if ENABLE_ANALYZER
@@ -2271,8 +2269,8 @@ region_model::get_rvalue_1 (path_var pv, region_model_context *ctxt) const
       }
     case OBJ_TYPE_REF:
       {
-	tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
-	return get_rvalue (expr, ctxt);
+        tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
+        return get_rvalue (expr, ctxt);
       }
     }
 }
@@ -2856,9 +2854,10 @@ public:
   {
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
     if (m_allocation_event)
-      return ev.formatted_print ("assigned to %qT here; %<sizeof (%T)%> is %qE",
-			       m_lhs->get_type (), pointee_type,
-			       size_in_bytes (pointee_type));
+      return ev.formatted_print ("assigned to %qT here;"
+				 " %<sizeof (%T)%> is %qE",
+				 m_lhs->get_type (), pointee_type,
+				 size_in_bytes (pointee_type));
     else
       if (m_expr)
 	return ev.formatted_print ("allocated %qE bytes and assigned to"
@@ -4063,7 +4062,7 @@ region_model::update_for_return_gcall (const gcall *call_stmt,
   pop_frame (lhs, NULL, ctxt);
 }
 
-/* Extract calling information from the superedge and update the model for the
+/* Extract calling information from the superedge and update the model for the 
    call  */
 
 void
@@ -4074,7 +4073,7 @@ region_model::update_for_call_superedge (const call_superedge &call_edge,
   update_for_gcall (call_stmt, ctxt, call_edge.get_callee_function ());
 }
 
-/* Extract calling information from the return superedge and update the model
+/* Extract calling information from the return superedge and update the model 
    for the returning call */
 
 void
@@ -6322,10 +6321,10 @@ test_widening_constraints ()
        {i_23: (WIDENED (at phi, 0, 1) + 1); WIDENED <= 255}
      i_11 = PHI(); merge with state at phi above
        {i_11: WIDENED (at phi, 0, 1); WIDENED <= 256}
-	 [changing meaning of "WIDENED" here]
+         [changing meaning of "WIDENED" here]
      if (i_11 <= 255)
-	T: {i_11: WIDENED (at phi, 0, 1); WIDENED <= 255}; cache hit
-	F: {i_11: 256}
+        T: {i_11: WIDENED (at phi, 0, 1); WIDENED <= 255}; cache hit
+        F: {i_11: 256}
  */
 
 static void
@@ -6588,18 +6587,18 @@ test_mem_ref ()
    from data-model-1.c, which looks like this at the gimple level:
        # __analyzer_eval (a[3] == 42); [should be UNKNOWN]
        int *_1 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       int _2 = *_1;	     # MEM_REF
+       int _2 = *_1;             # MEM_REF
        _Bool _3 = _2 == 42;
        int _4 = (int) _3;
        __analyzer_eval (_4);
 
        # a[3] = 42;
        int *_5 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       *_5 = 42;		 # MEM_REF
+       *_5 = 42;                 # MEM_REF
 
        # __analyzer_eval (a[3] == 42); [should be TRUE]
        int *_6 = a_10(D) + 12;   # POINTER_PLUS_EXPR
-       int _7 = *_6;	     # MEM_REF
+       int _7 = *_6;             # MEM_REF
        _Bool _8 = _7 == 42;
        int _9 = (int) _8;
        __analyzer_eval (_9);  */

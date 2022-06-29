@@ -678,7 +678,7 @@ start_cfg_edge_event::get_desc (bool can_colorize) const
       |     ~
       |     |
       |     (1) following 'false' branch (when 'ptr' is non-NULL)...
-					  ^^^^^^^^^^^^^^^^^^^^^^
+                                          ^^^^^^^^^^^^^^^^^^^^^^
 
    In the above example, this function would generate the highlighted
    string: "when 'ptr' is non-NULL".
