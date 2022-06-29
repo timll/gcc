@@ -313,7 +313,6 @@ region_creation_event::get_desc (bool can_colorize) const
 	return custom_desc;
     }
 
-
   switch (m_reg->get_memory_space ())
     {
     default:
