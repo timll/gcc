@@ -1489,8 +1489,8 @@ diagnostic_manager::build_emission_path (const path_builder &pb,
 
 void
 diagnostic_manager::add_event_on_final_node (const exploded_node *final_enode,
-                                             checker_path *emission_path,
-                                             interesting_t *interest) const
+					     checker_path *emission_path,
+					     interesting_t *interest) const
 {
   const program_point &src_point = final_enode->get_point ();  
   const int src_stack_depth = src_point.get_stack_depth ();
@@ -1505,36 +1505,36 @@ diagnostic_manager::add_event_on_final_node (const exploded_node *final_enode,
     const program_state &dst_state = dst->get_state ();
     const region_model *dst_model = dst_state.m_region_model;
     if (src_model->get_dynamic_extents ()
-        != dst_model->get_dynamic_extents ())
+	!= dst_model->get_dynamic_extents ())
       {
-        unsigned i;
-        const region *reg;
-        bool emitted = false;
-        FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
-          {
-            const region *base_reg = reg->get_base_region ();
-            const svalue *old_extents
-        = src_model->get_dynamic_extents (base_reg);
-            const svalue *new_extents
-        = dst_model->get_dynamic_extents (base_reg);
-            if (old_extents == NULL && new_extents != NULL)
-              switch (base_reg->get_kind ())
-                {
-                default:
-                  break;
-                case RK_HEAP_ALLOCATED:
-                case RK_ALLOCA:
-                  emission_path->add_region_creation_event
-                    (reg,
-                    src_point.get_location (),
-                    src_point.get_fndecl (),
-                    src_stack_depth);
-                  emitted = true;
-                  break;
-                }
-          }
-        if (emitted)
-          break;
+	unsigned i;
+	const region *reg;
+	bool emitted = false;
+	FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
+	  {
+	    const region *base_reg = reg->get_base_region ();
+	    const svalue *old_extents
+	= src_model->get_dynamic_extents (base_reg);
+	    const svalue *new_extents
+	= dst_model->get_dynamic_extents (base_reg);
+	    if (old_extents == NULL && new_extents != NULL)
+	      switch (base_reg->get_kind ())
+		{
+		default:
+		  break;
+		case RK_HEAP_ALLOCATED:
+		case RK_ALLOCA:
+		  emission_path->add_region_creation_event
+		    (reg,
+		    src_point.get_location (),
+		    src_point.get_fndecl (),
+		    src_stack_depth);
+		  emitted = true;
+		  break;
+		}
+	  }
+	if (emitted)
+	  break;
       }
   }
 }
