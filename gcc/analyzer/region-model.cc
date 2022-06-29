@@ -2845,7 +2845,13 @@ public:
   {
     m_allocation_event = &ev;
     if (m_expr)
-      return ev.formatted_print ("allocated %qE bytes here", m_expr);
+      {
+	if (TREE_CODE (m_expr) == INTEGER_CST)
+	  return ev.formatted_print ("allocated %E bytes here", m_expr);
+	else
+	  return ev.formatted_print ("allocated %qE bytes here", m_expr);
+      }
+
     return ev.formatted_print ("allocated here");
   }
 
@@ -2854,24 +2860,31 @@ public:
   {
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
     if (m_allocation_event)
-      /* Fallback: Typically we should always
-         see an m_allocation_event before.  */
+      /* Fallback: Typically, we should always
+	 see an m_allocation_event before.  */
       return ev.formatted_print ("assigned to %qT here;"
 				 " %<sizeof (%T)%> is %qE",
 				 m_lhs->get_type (), pointee_type,
 				 size_in_bytes (pointee_type));
-    else
-      if (m_expr)
-	return ev.formatted_print ("allocated %qE bytes and assigned to"
-				   " %qT here; %<sizeof (%T)%> is %qE",
-				   m_expr,
-				   m_lhs->get_type (), pointee_type,
-				   size_in_bytes (pointee_type));
-      else
-	return ev.formatted_print ("allocated and assigned to %qT here;"
-				   " %<sizeof (%T)%> is %qE",
-				   m_lhs->get_type (), pointee_type,
-				   size_in_bytes (pointee_type));
+
+    if (m_expr)
+      {
+	if (TREE_CODE (m_expr) == INTEGER_CST)
+	  return ev.formatted_print ("allocated %E bytes and assigned to"
+				    " %qT here; %<sizeof (%T)%> is %qE",
+				    m_expr, m_lhs->get_type (), pointee_type,
+				    size_in_bytes (pointee_type));
+	else
+	  return ev.formatted_print ("allocated %qE bytes and assigned to"
+				    " %qT here; %<sizeof (%T)%> is %qE",
+				    m_expr, m_lhs->get_type (), pointee_type,
+				    size_in_bytes (pointee_type));
+      }
+
+    return ev.formatted_print ("allocated and assigned to %qT here;"
+			       " %<sizeof (%T)%> is %qE",
+			       m_lhs->get_type (), pointee_type,
+			       size_in_bytes (pointee_type));
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
@@ -2894,7 +2907,7 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 {
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
   if (pointee_size == 0)
-    return 0;
+    return false;
   unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
 
   if (is_struct)
