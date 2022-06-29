@@ -2854,6 +2854,8 @@ public:
   {
     tree pointee_type = TREE_TYPE (m_lhs->get_type ());
     if (m_allocation_event)
+      /* Fallback: Typically we should always 
+         see an m_allocation_event before.  */
       return ev.formatted_print ("assigned to %qT here;"
 				 " %<sizeof (%T)%> is %qE",
 				 m_lhs->get_type (), pointee_type,
