@@ -1492,7 +1492,7 @@ diagnostic_manager::add_event_on_final_node (const exploded_node *final_enode,
 					     checker_path *emission_path,
 					     interesting_t *interest) const
 {
-  const program_point &src_point = final_enode->get_point ();  
+  const program_point &src_point = final_enode->get_point ();
   const int src_stack_depth = src_point.get_stack_depth ();
   const program_state &src_state = final_enode->get_state ();
   const region_model *src_model = src_state.m_region_model;

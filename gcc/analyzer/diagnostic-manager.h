@@ -150,8 +150,8 @@ private:
 			    checker_path *emission_path) const;
 
   void add_event_on_final_node (const exploded_node *final_enode,
-                                checker_path *emission_path,
-                                interesting_t *interest) const;
+				checker_path *emission_path,
+				interesting_t *interest) const;
 
   void add_events_for_eedge (const path_builder &pb,
 			     const exploded_edge &eedge,
