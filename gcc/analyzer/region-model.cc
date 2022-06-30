@@ -2910,8 +2910,6 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
   gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
 
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
-  if (pointee_size == 0)
-    return false;
   unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
 
   if (is_struct)
@@ -3136,7 +3134,8 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
   /* We give up if the type size is not known at compile-time or the
      type size is always compatible regardless of the buffer size.  */
   if (TREE_CODE (pointee_size_tree) != INTEGER_CST
-      || TREE_INT_CST_LOW (pointee_size_tree) == 1)
+      || integer_zerop (pointee_size_tree) 
+      || integer_onep (pointee_size_tree))
     return;
 
   const region *rhs_reg = reg_sval->get_pointee ();
