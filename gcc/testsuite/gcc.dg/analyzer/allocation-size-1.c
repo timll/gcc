@@ -109,7 +109,8 @@ void test_9 (void)
   free (buf);
 }
 
-void test_10 (void)
+void test_10 (int n)
 {
-
+  char *ptr = malloc (7 * n);
+  free (ptr);
 }
