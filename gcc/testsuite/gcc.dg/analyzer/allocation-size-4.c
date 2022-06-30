@@ -28,8 +28,9 @@ void test_2 (void)
   long *ptr = malloc (5 * sizeof (struct base));  /* { dg-line malloc2 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc2 } */
-  /* { dg-message "" "" { target *-*-* } malloc2 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc2 } */
+  /* { dg-message "\\d+ bytes" "note" { target *-*-* } malloc2 } */
+  /* { dg-message "'long (int)? \\*' here; 'sizeof \\(long (int)?\\)' is '\\d+'" "note" { target *-*-* } malloc2 } */
 }
 
 void test_3 (void)
@@ -53,6 +54,7 @@ void test_5 (void)
   struct base *ptr = malloc (2);  /* { dg-line malloc5 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc5 } */
-  /* { dg-message "" "" { target *-*-* } malloc5 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc5 } */
+  /* { dg-message "\\d+ bytes" "note" { target *-*-* } malloc5 } */
+  /* { dg-message "'struct base \\*' here; 'sizeof \\(struct base\\)' is '\\d+'" "note" { target *-*-* } malloc5 } */
 }

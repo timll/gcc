@@ -14,8 +14,9 @@ void test_2 (int n)
   int *ptr = malloc (n * sizeof (short)); /* { dg-line malloc2 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc2 } */
-  /* { dg-message "" "" { target *-*-* } malloc2 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc2 } */
+  /* { dg-message "'\[a-z0-9\\*\\(\\)\\s\]*' bytes" "note" { target *-*-* } malloc2 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc2 } */
 }
 
 void test_3 (int n)
@@ -27,12 +28,12 @@ void test_3 (int n)
 
 void test_4 (int n)
 {
-  void *ptr = malloc (n * sizeof (short)); /* { dg-message } */
+  void *ptr = malloc (n * sizeof (short)); /* { dg-message "'\[a-z0-9\\*\\(\\)\\s\]*'" "note" } */
   int *iptr = (int *)ptr; /* { dg-line assign4 } */
   free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } assign4 } */
-  /* { dg-message "" "" { target *-*-* } assign4 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } assign4 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } assign4 } */
 }
 
 void test_5 (void)
@@ -94,12 +95,12 @@ void test_9 (void)
   int n;
   scanf("%i", &n);
   /* n is a conjured_svalue.  */
-  void *ptr = malloc (n); /* { dg-message } */
+  void *ptr = malloc (n); /* { dg-message "'n' bytes" "note" } */
   int *iptr = (int *)ptr; /* { dg-line assign9 } */
   free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } assign9 } */
-  /* { dg-message "" "" { target *-*-* } assign9 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } assign9 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } assign9 } */
 }
 
 void test_11 (void)
@@ -122,7 +123,7 @@ void test_12 (void)
 {
   int n;
   scanf("%i", &n);
-  void *ptr = malloc (n); /* { dg-message } */
+  void *ptr = malloc (n); /* { dg-message "'n' bytes" } */
   if (n == 5)
     {
       /* n is a conjured_svalue but guarded such that we
@@ -132,15 +133,15 @@ void test_12 (void)
     }
   else
     free (ptr);
-  /* { dg-warning "" "" { target *-*-* } assign12 } */
-  /* { dg-message "" "" { target *-*-* } assign12 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } assign12 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } assign12 } */
 }
 
 void test_13 (void)
 {
   int n;
   scanf("%i", &n);
-  void *ptr = malloc (n); /* { dg-message } */
+  void *ptr = malloc (n);
   if (n == n * n)
     {
       /* n is a conjured_svalue but guarded such that we don't have an

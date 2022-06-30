@@ -13,8 +13,9 @@ void test_1(void)
 
   free (id_sequence);
 
-  /* { dg-warning "" "" { target *-*-* } malloc1 } */
-  /* { dg-message "" "" { target *-*-* } malloc1 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc1 } */
+  /* { dg-message "\\d+ bytes" "note" { target *-*-* } malloc1 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc1 } */
 }
 
 void test_2(void)
@@ -22,8 +23,9 @@ void test_2(void)
   int *ptr = malloc (10 + sizeof(int)); /* { dg-line malloc2 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc2 } */
-  /* { dg-message "" "" { target *-*-* } malloc2 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc2 } */
+  /* { dg-message "\\d+ bytes" "note" { target *-*-* } malloc2 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc2 } */
 }
 
 void test_3(int n)
@@ -31,8 +33,9 @@ void test_3(int n)
   int *ptr = malloc (n + sizeof (int)); /* { dg-line malloc3 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc3 } */
-  /* { dg-message "" "" { target *-*-* } malloc3 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc3 } */
+  /* { dg-message "'\[a-z0-9\\+\\(\\)\\s\]*' bytes" "note" { target *-*-* } malloc3 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc3 } */
 }
 
 void test_4(int n, int m)

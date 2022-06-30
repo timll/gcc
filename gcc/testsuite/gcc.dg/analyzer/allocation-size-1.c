@@ -14,8 +14,9 @@ void test_2 (void)
   int *ptr = malloc (21 * sizeof (short)); /* { dg-line malloc2 } */
   free (ptr);
 
-  /* { dg-warning "" "" { target *-*-* } malloc2 } */
-  /* { dg-message "" "" { target *-*-* } malloc2 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc2 } */
+  /* { dg-message "\\d+ bytes" "note" { target *-*-* } malloc2 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc2 } */
 }
 
 void test_3 (void)
@@ -27,12 +28,12 @@ void test_3 (void)
 
 void test_4 (void)
 {
-  void *ptr = malloc (21 * sizeof (short)); /* { dg-message } */
+  void *ptr = malloc (21 * sizeof (short)); /* { dg-message "\\d+ bytes" } */
   int *iptr = (int *)ptr; /* { dg-line assign4 } */
   free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } assign4 } */
-  /* { dg-message "" "" { target *-*-* } assign4 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } assign4 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } assign4 } */
 }
 
 void test_5 (void)
@@ -58,12 +59,14 @@ void test_6 (void)
     n = 21 * sizeof (short);
   else
     n = 42 * sizeof (short);
-  void *ptr = malloc (n); /* { dg-message } */
+  void *ptr = malloc (n); /* { dg-message "" "note" } */
+                          /* ^^^ on widening_svalues no expr is returned
+                                 by get_representative_tree at the moment.  */ 
   int *iptr = (int *)ptr; /* { dg-line assign6 } */
   free (iptr);
 
-  /* { dg-warning "" "" { target *-*-* } assign6 } */
-  /* { dg-message "" "" { target *-*-* } assign6 } */
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } assign6 } */
+  /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } assign6 } */
 }
 
 void test_7 (void)
