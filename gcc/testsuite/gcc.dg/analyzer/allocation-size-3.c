@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 /* CWE-131 example 5 */
-void test_1(void) 
+void test_1 (void) 
 {
   int *id_sequence = (int *) malloc (3); /* { dg-line malloc1 } */
   if (id_sequence == NULL) exit (1);
@@ -18,7 +18,7 @@ void test_1(void)
   /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc1 } */
 }
 
-void test_2(void)
+void test_2 (void)
 {
   int *ptr = malloc (10 + sizeof(int)); /* { dg-line malloc2 } */
   free (ptr);
@@ -28,7 +28,7 @@ void test_2(void)
   /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc2 } */
 }
 
-void test_3(int n)
+void test_3 (int n)
 {
   int *ptr = malloc (n + sizeof (int)); /* { dg-line malloc3 } */
   free (ptr);
@@ -38,7 +38,7 @@ void test_3(int n)
   /* { dg-message "'int \\*' here; 'sizeof \\(int\\)' is '\\d+'" "note" { target *-*-* } malloc3 } */
 }
 
-void test_4(int n, int m)
+void test_4 (int n, int m)
 {
   int *ptr = malloc ((n + m) * sizeof (int));
   free (ptr);

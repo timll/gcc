@@ -86,18 +86,18 @@ void test_7 (void)
   free (iptr);
 }
 
-void *create_buffer(int n)
+void *create_buffer (int n)
 {
   return malloc(n);
 }
 
-void test_8(void) 
+void test_8 (void) 
 {
   int *buf = create_buffer(4 * sizeof (int));
   free (buf);
 }
 
-void test_9(void) 
+void test_9 (void) 
 {
   /* FIXME: At the moment, region_model::set_value (lhs, <return_value>)
      is called at the src_node of the return edge. This edge has no stmts
@@ -107,4 +107,9 @@ void test_9(void)
      that is after the return edge.  */
   int *buf = create_buffer(42); /* { dg-warning "" "" { xfail *-*-* } } */
   free (buf);
+}
+
+void test_10 (void)
+{
+
 }

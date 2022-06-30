@@ -2943,22 +2943,19 @@ public:
     return result_set.contains (m_sval);
   }
 
-  void
-  visit_constant_svalue (const constant_svalue *sval) final override
+  void visit_constant_svalue (const constant_svalue *sval) final override
   {
     if (capacity_compatible_with_type (sval->get_constant (), m_size_cst))
       result_set.add (sval);
   }
 
-  void
-  visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED)
+  void visit_unknown_svalue (const unknown_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     result_set.add (sval);
   }
 
-  void
-  visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED)
+  void visit_poisoned_svalue (const poisoned_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
     result_set.add (sval);
