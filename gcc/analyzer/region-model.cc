@@ -2822,7 +2822,8 @@ public:
 
   bool operator== (const dubious_allocation_size &other) const
   {
-    return m_lhs == other.m_lhs && m_rhs == other.m_rhs;
+    return m_lhs == other.m_lhs && m_rhs == other.m_rhs
+	   && pending_diagnostic::same_tree_p (m_expr, other.m_expr);
   }
 
   int get_controlling_option () const final override
