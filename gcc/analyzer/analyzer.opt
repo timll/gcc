@@ -56,7 +56,7 @@ The maximum depth of exploded nodes that should appear in a dot dump before swit
 
 Wanalyzer-allocation-size
 Common Var(warn_analyzer_allocation_size) Init(1) Warning
-Warn about code paths in which a buffer is assigned to a incompatible type.
+Warn about code paths in which a pointer to a buffer is assigned to an incompatible type.
 
 Wanalyzer-double-fclose
 Common Var(warn_analyzer_double_fclose) Init(1) Warning

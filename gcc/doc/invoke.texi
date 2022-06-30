@@ -9766,8 +9766,9 @@ This warning requires @option{-fanalyzer}, which enables it; use
 @option{-Wno-analyzer-allocation-size}
 to disable it.
 
-This diagnostic warns for paths through the code in which a buffer is casted
-to a type where the buffer size is not a multiple of the pointee size.
+This diagnostic warns for paths through the code in which a pointer to
+a buffer is assigned to point at a buffer with a size that is not a
+multiple of @code{sizeof (*pointer)}.
 
 See @url{https://cwe.mitre.org/data/definitions/131.html, CWE-131: Incorrect Calculation of Buffer Size}.
 
