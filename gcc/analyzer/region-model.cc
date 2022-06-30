@@ -2906,6 +2906,9 @@ static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 			       bool is_struct)
 {
+  gcc_assert (TREE_CODE (cst) == INTEGER_CST);
+  gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
+
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
   if (pointee_size == 0)
     return false;
@@ -2914,6 +2917,12 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
   if (is_struct)
     return alloc_size >= pointee_size;
   return alloc_size % pointee_size == 0;
+}
+
+static bool
+capacity_compatible_with_type (tree cst, tree pointee_size_tree)
+{
+  return capacity_compatible_with_type (cst, pointee_size_tree, false);
 }
 
 /* Checks whether SVAL could be a multiple of SIZE_CST.
@@ -2939,10 +2948,7 @@ public:
   void
   visit_constant_svalue (const constant_svalue *sval) final override
   {
-    unsigned HOST_WIDE_INT sval_int
-	  = TREE_INT_CST_LOW (sval->get_constant ());
-    unsigned HOST_WIDE_INT size_cst_int = TREE_INT_CST_LOW (m_size_cst);
-    if (size_cst_int == 0 || sval_int % size_cst_int == 0)
+    if (capacity_compatible_with_type (sval->get_constant (), m_size_cst))
       result_set.add (sval);
   }
 
@@ -3010,8 +3016,19 @@ public:
   void visit_conjured_svalue (const conjured_svalue *sval ATTRIBUTE_UNUSED)
     final override
   {
-    if (m_cm->get_equiv_class_by_svalue (sval, NULL))
-      result_set.add (sval);
+    equiv_class_id id (-1);
+    if (m_cm->get_equiv_class_by_svalue (sval, &id))
+      {
+        if (tree cst_val = id.get_obj (*m_cm).get_any_constant ())
+          {
+            if (capacity_compatible_with_type (cst_val, m_size_cst))
+              result_set.add (sval);
+          }
+        else
+          {
+            result_set.add (sval);
+          }
+      }
   }
 
   void visit_asm_output_svalue (const asm_output_svalue *sval ATTRIBUTE_UNUSED)
