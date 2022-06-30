@@ -3131,7 +3131,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
   /* We give up if the type size is not known at compile-time or the
      type size is always compatible regardless of the buffer size.  */
   if (TREE_CODE (pointee_size_tree) != INTEGER_CST
-      || integer_zerop (pointee_size_tree) 
+      || integer_zerop (pointee_size_tree)
       || integer_onep (pointee_size_tree))
     return;
 
