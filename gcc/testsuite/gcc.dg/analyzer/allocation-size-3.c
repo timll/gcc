@@ -26,10 +26,8 @@ void test_2(void)
   /* { dg-message "" "" { target *-*-* } malloc2 } */
 }
 
-void test_3(void)
+void test_3(int n)
 {
-  int n;
-  scanf("%i", &n);
   int *ptr = malloc (n + sizeof (int)); /* { dg-line malloc3 } */
   free (ptr);
 
@@ -37,12 +35,8 @@ void test_3(void)
   /* { dg-message "" "" { target *-*-* } malloc3 } */
 }
 
-void test_4(void)
+void test_4(int n, int m)
 {
-  int n;
-  scanf("%i", &n);
-  int m;
-  scanf("%i", &m);
   int *ptr = malloc ((n + m) * sizeof (int));
   free (ptr);
 }

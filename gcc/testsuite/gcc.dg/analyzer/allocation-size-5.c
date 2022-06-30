@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* Tests related to structs.  */
+/* Tests related to statically allocated buffers.  */
 
 typedef struct a {
   short s;
@@ -20,21 +20,17 @@ int *test_1 (void)
 
 int *test2 (void)
 {
-  char arr[4];
+  char arr[sizeof (int)];
   int *ptr = (int *)arr;
   return ptr;
 }
 
 int *test3 (void)
 {
-  char arr[2];
+  char arr[sizeof (short)];
   int *ptr = (int *)arr; /* { dg-line assign3 } */
   return ptr;
 
   /* { dg-warning "" "" { target *-*-* } assign3 } */
   /* { dg-message "" "" { target *-*-* } assign3 } */
-}
-
-int main() {
-  return 0;
 }

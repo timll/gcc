@@ -96,7 +96,12 @@ void test_8(void)
 
 void test_9(void) 
 {
-  // FIXME
+  /* FIXME: At the moment, region_model::set_value (lhs, <return_value>)
+     is called at the src_node of the return edge. This edge has no stmts
+     associated with it, leading to a rejection of the warning inside
+     impl_region_model_context::warn. To ensure that the indentation
+     in the diagnostic is right, the warning has to be emitted on an EN
+     that is after the return edge.  */
   int *buf = create_buffer(42); /* { dg-warning "" "" { xfail *-*-* } } */
   free (buf);
 }
