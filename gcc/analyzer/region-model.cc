@@ -3019,15 +3019,15 @@ public:
     equiv_class_id id (-1);
     if (m_cm->get_equiv_class_by_svalue (sval, &id))
       {
-        if (tree cst_val = id.get_obj (*m_cm).get_any_constant ())
-          {
-            if (capacity_compatible_with_type (cst_val, m_size_cst))
-              result_set.add (sval);
-          }
-        else
-          {
-            result_set.add (sval);
-          }
+	if (tree cst_val = id.get_obj (*m_cm).get_any_constant ())
+	  {
+	    if (capacity_compatible_with_type (cst_val, m_size_cst))
+	      result_set.add (sval);
+	  }
+	else
+	  {
+	    result_set.add (sval);
+	  }
       }
   }
 
@@ -3084,10 +3084,9 @@ is_any_cast_p (const gimple *stmt)
 {
   if (const gassign *assign = dyn_cast<const gassign *>(stmt))
     return gimple_assign_cast_p (assign)
-	  || (gimple_num_ops (assign) == 2
-	      && !pending_diagnostic::same_tree_p (
-				    TREE_TYPE (gimple_assign_lhs (assign)),
-				    TREE_TYPE (gimple_assign_rhs1 (assign))));
+	   || !pending_diagnostic::same_tree_p (
+		  TREE_TYPE (gimple_assign_lhs (assign)),
+		  TREE_TYPE (gimple_assign_rhs1 (assign)));
   else if (const gcall *call = dyn_cast<const gcall *>(stmt))
     {
       tree lhs = gimple_call_lhs (call);
