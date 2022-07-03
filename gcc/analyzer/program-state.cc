@@ -996,6 +996,29 @@ program_state::get_current_function () const
   return m_region_model->get_current_function ();
 }
 
+class return_stmt_finder : public stmt_finder
+{
+public:
+  stmt_finder *clone () const final override
+  {
+    return new return_stmt_finder ();
+  }
+
+  const gimple *find_stmt (const exploded_path &epath) final override
+  {
+    int i;
+    const exploded_edge *eedge;
+    FOR_EACH_VEC_ELT_REVERSE (epath.m_edges, i, eedge)
+      {
+        const exploded_node *dst_node = eedge->m_dest;
+        const program_point &dst_point = dst_node->get_point ();
+        const gimple *stmt = dst_point.get_stmt ();
+        if (stmt)
+          return stmt;
+      }
+  }
+};
+
 /* Determine if following edge SUCC from ENODE is valid within the graph EG
    and update this state accordingly in-place.
 
@@ -1027,11 +1050,14 @@ program_state::on_edge (exploded_graph &eg,
      sm-state transitions (e.g. transitions due to ptrs becoming known
      to be NULL or non-NULL) */
 
+  return_stmt_finder stmt_finder;
+
   impl_region_model_context ctxt (eg, enode,
 				  &enode->get_state (),
 				  this,
 				  uncertainty, NULL,
-				  last_stmt);
+				  last_stmt,
+          &stmt_finder);
   if (!m_region_model->maybe_update_for_edge (*succ,
 					      last_stmt,
 					      &ctxt, NULL))

@@ -109,6 +109,8 @@ event_kind_to_string (enum event_kind ek)
       return "EK_REWIND_FROM_LONGJMP";
     case EK_REWIND_TO_SETJMP:
       return "EK_REWIND_TO_SETJMP";
+    case EK_FLOW:
+      return "EK_FLOW";
     case EK_WARNING:
       return "EK_WARNING";
     }
@@ -1112,6 +1114,17 @@ rewind_to_setjmp_event::prepare_for_emission (checker_path *path,
   checker_event::prepare_for_emission (path, pd, emission_id);
   path->get_setjmp_event (m_rewind_info->get_enode_origin (),
 			  &m_original_setjmp_event_id);
+}
+
+/* class flow_event : public checker_event.  */
+
+/* Implementation of diagnostic_event::get_desc vfunc for
+   flow_event.  */
+
+label_text
+flow_event::get_desc (bool can_colorize) const
+{
+  return label_text::borrow ("assigned here");
 }
 
 /* class warning_event : public checker_event.  */

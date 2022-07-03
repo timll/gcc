@@ -62,6 +62,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/feasible-graph.h"
 #include "analyzer/checker-path.h"
 #include "analyzer/reachability.h"
+#include "gimple-pretty-print.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -1966,6 +1968,31 @@ diagnostic_manager::add_events_for_eedge (const path_builder &pb,
 				  dst_point.get_fndecl (),
 				  dst_stack_depth, dst_state));
 
+  if (interest)
+		if (const gassign *assign = dyn_cast<const gassign *> (stmt))
+		  {
+            debug_gimple_stmt ((gimple *)assign);
+        tree rhs = gimple_assign_rhs1 (assign);
+        debug_tree (rhs);
+        const svalue *rhs_sval = src_state.m_region_model->get_rvalue (rhs, NULL);
+        rhs_sval->dump (false);
+        if (const region_svalue *reg_sval = dyn_cast <const region_svalue *> (rhs_sval))
+          {
+            unsigned i;
+            const region *reg;
+            FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
+              {
+                reg->dump (false);
+                reg_sval->get_pointee ()->dump (false);
+                if (reg->descendent_of_p (reg_sval->get_pointee ()))
+                  emission_path->add_event
+                    (new flow_event (stmt,
+                                    dst_point.get_fndecl (),
+                                    dst_stack_depth));
+              }
+          }
+      }
+
 	/* Create state change events for assignment to NULL.
 	   Iterate through the stmts in dst_enode, adding state change
 	   events for them.  */
@@ -2529,6 +2556,9 @@ diagnostic_manager::prune_for_sm_diagnostic (checker_path *path,
 	case EK_REWIND_FROM_LONGJMP:
 	case EK_REWIND_TO_SETJMP:
 	  break;
+
+  case EK_FLOW:
+    /* Do not filter flow events of interest.  */
 
 	case EK_WARNING:
 	  /* Always show the final "warning" event in the path.  */

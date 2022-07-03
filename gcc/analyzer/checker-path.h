@@ -46,6 +46,7 @@ enum event_kind
   EK_SETJMP,
   EK_REWIND_FROM_LONGJMP,
   EK_REWIND_TO_SETJMP,
+  EK_FLOW,
   EK_WARNING
 };
 
@@ -551,6 +552,23 @@ public:
 
 private:
   diagnostic_event_id_t m_original_setjmp_event_id;
+};
+
+
+/* A concrete event subclass for an assignment of an region.  */
+
+class flow_event : public checker_event
+{
+public:
+  flow_event (const gimple *stmt, tree fndecl, int depth)
+  : checker_event (EK_FLOW, stmt->location, fndecl, depth), m_stmt (stmt)
+  {
+  }
+
+  label_text get_desc (bool can_colorize) const final override;
+
+private:
+  const gimple *m_stmt;
 };
 
 /* Concrete subclass of checker_event for use at the end of a path:
