@@ -46,6 +46,7 @@ enum event_kind
   EK_SETJMP,
   EK_REWIND_FROM_LONGJMP,
   EK_REWIND_TO_SETJMP,
+  EK_OUT_OF_CONTEXT,
   EK_WARNING
 };
 
@@ -551,6 +552,22 @@ public:
 
 private:
   diagnostic_event_id_t m_original_setjmp_event_id;
+};
+
+/* A concrete event subclass for rewinding from a longjmp to a setjmp,
+   showing the setjmp (or sigsetjmp).  */
+
+class out_of_context_event : public checker_event
+{
+public:
+  out_of_context_event (const gimple *stmt, location_t loc, tree fndecl, int depth)
+  : checker_event (EK_OUT_OF_CONTEXT, loc, fndecl, depth), m_stmt(stmt)
+  {
+  }
+
+  label_text get_desc (bool can_colorize) const final override;
+
+  const gimple *m_stmt;
 };
 
 /* Concrete subclass of checker_event for use at the end of a path:

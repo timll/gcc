@@ -4460,12 +4460,16 @@ public:
 	       "stack address escapes function");
   }
 
+  label_text describe_region_creation_event (const evdesc::region_creation &ev)
+    final override
+  {
+    return label_text::borrow ("region created on stack here...");
+  }
+
   label_text describe_final_event (const evdesc::final_event &ev) final
   override
   {
-    if (m_expr)
-      return ev.formatted_print ("%qE escapes here", m_expr);
-    return ev.formatted_print ("escapes here");
+    return label_text::borrow ("...and escapes the function here");
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override

@@ -1113,6 +1113,16 @@ rewind_to_setjmp_event::prepare_for_emission (checker_path *path,
   path->get_setjmp_event (m_rewind_info->get_enode_origin (),
 			  &m_original_setjmp_event_id);
 }
+/* class out_of_context_event : public checker_event.  */
+
+/* Implementation of diagnostic_event::get_desc vfunc for
+   out_of_context_event.  */
+
+label_text
+out_of_context_event::get_desc (bool can_colorize) const
+{
+  return label_text::borrow ("...stack address gets assigned to a longer-lived region here...");
+}
 
 /* class warning_event : public checker_event.  */
 
