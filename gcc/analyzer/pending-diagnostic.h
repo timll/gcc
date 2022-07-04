@@ -35,6 +35,7 @@ namespace ana {
 struct interesting_t
 {
   void add_region_creation (const region *reg);
+  void add_region_assignment (const region *reg);
 
   void dump_to_pp (pretty_printer *pp, bool simple) const;
 

@@ -57,6 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/exploded-graph.h"
 #include "analyzer/state-purge.h"
 #include "analyzer/analyzer-selftests.h"
+#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -1016,6 +1017,7 @@ public:
         if (stmt)
           return stmt;
       }
+    return NULL;
   }
 };
 

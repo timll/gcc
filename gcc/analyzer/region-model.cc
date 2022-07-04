@@ -4469,12 +4469,14 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev) final
   override
   {
+    if (m_expr)
+      return ev.formatted_print ("...and %qE escapes the function here", m_expr);
     return label_text::borrow ("...and escapes the function here");
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
   {
-    interest->add_region_creation (m_reg);
+    interest->add_region_assignment (m_reg);
   }
 
 private:

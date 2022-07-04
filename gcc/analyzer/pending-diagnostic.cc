@@ -74,6 +74,13 @@ interesting_t::add_region_creation (const region *reg)
 }
 
 void
+interesting_t::add_region_assignment (const region *reg)
+{
+  gcc_assert (reg);
+  m_region_assignment.safe_push (reg);
+}
+
+void
 interesting_t::dump_to_pp (pretty_printer *pp, bool simple) const
 {
   pp_string (pp, "{ region creation: [");

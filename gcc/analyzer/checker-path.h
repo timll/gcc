@@ -554,13 +554,14 @@ private:
   diagnostic_event_id_t m_original_setjmp_event_id;
 };
 
-/* A concrete event subclass for rewinding from a longjmp to a setjmp,
-   showing the setjmp (or sigsetjmp).  */
+/* A concrete event subclass for an assignment of a stack address to
+   a longer lived region.  */
 
 class out_of_context_event : public checker_event
 {
 public:
-  out_of_context_event (const gimple *stmt, location_t loc, tree fndecl, int depth)
+  out_of_context_event (const gimple *stmt, location_t loc,
+                        tree fndecl, int depth)
   : checker_event (EK_OUT_OF_CONTEXT, loc, fndecl, depth), m_stmt(stmt)
   {
   }

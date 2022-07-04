@@ -1851,6 +1851,52 @@ struct null_assignment_sm_context : public sm_context
   const extrinsic_state &m_ext_state;
 };
 
+static const region *
+maybe_get_region_for_pointer (const svalue *sval)
+{
+  while (1)
+    {
+      switch (sval->get_kind ())
+        {
+        default: 
+          return NULL;
+        case SK_REGION:
+          {
+            const region_svalue *region_sval
+              = as_a <const region_svalue *> (sval);
+            return region_sval->get_pointee ();
+          }
+        case SK_UNARYOP:
+          {
+            const unaryop_svalue *unop_sval
+              = as_a <const unaryop_svalue *> (sval);
+            if (CONVERT_EXPR_CODE_P (unop_sval->get_op ()))
+              sval = unop_sval->get_arg ();
+            else
+              return NULL;
+          }
+          break;
+        case SK_BINOP:
+          {
+            const binop_svalue *binop_sval
+              = as_a <const binop_svalue *> (sval);
+            if (binop_sval->get_op () == POINTER_PLUS_EXPR)
+              sval = binop_sval->get_arg0 ();
+            else
+              return NULL;
+          }
+          break;
+        case SK_UNMERGEABLE:
+          {
+            const unmergeable_svalue *unmerg_sval
+              = as_a <const unmergeable_svalue *> (sval);
+            sval = unmerg_sval->get_arg ();
+          }
+          break;
+        }
+    }
+}
+
 /* Subroutine of diagnostic_manager::build_emission_path.
    Add any events for EEDGE to EMISSION_PATH.  */
 
@@ -2004,41 +2050,40 @@ diagnostic_manager::add_events_for_eedge (const path_builder &pb,
 	      }
 
 	  }
-
+  
       if (const gassign *assign = dyn_cast<const gassign *> (stmt))
         if (interest)
           {
             tree arg1 = gimple_assign_rhs1 (assign);
-            const region *lhs_reg = dst_state.m_region_model->get_lvalue (gimple_assign_lhs (assign), NULL);
-            const decl_region *lhs_decl = dyn_cast <const decl_region *> (lhs_reg);
-            const svalue *rhs = dst_state.m_region_model->get_rvalue (arg1, NULL);
-            const region_svalue *regsval = dyn_cast <const region_svalue *> (rhs);
-            if (lhs_decl && regsval)
+            const region *lhs_reg 
+              = dst_state.m_region_model->get_lvalue (gimple_assign_lhs (assign), 
+                                                      NULL);
+            const decl_region *lhs_decl 
+              = dyn_cast <const decl_region *> (lhs_reg);
+            const svalue *rhs = dst_state.m_region_model->get_rvalue (arg1, 
+                                                                      NULL);
+            const region *rhs_reg = maybe_get_region_for_pointer (rhs);
+            const frame_region *rhs_frame = rhs_reg->maybe_get_frame_region ();
+            if (lhs_decl && rhs_frame
+                && lhs_decl->get_stack_depth () 
+                      != rhs_frame->get_stack_depth ())
               {
-                const region *rhs_reg = regsval->get_pointee ();
-                const frame_region *rhs_decl = rhs_reg->maybe_get_frame_region ();
-                    debug_gimple_stmt ((gimple *) stmt);
-                    lhs_reg->dump (false);
-                    rhs_reg->dump (false);
-                if (rhs_decl && lhs_decl->get_stack_depth () != rhs_decl->get_stack_depth ())
+                unsigned i;
+                const region *reg;
+                FOR_EACH_VEC_ELT (interest->m_region_assignment, i, reg)
                   {
-                    unsigned i;
-                    const region *reg;
-                    FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
-                      {
-                        if (reg == rhs_reg)
-                          emission_path->add_event
-                            (new out_of_context_event(stmt,
-                            dst_point.get_location (),
-                            dst_point.get_fndecl (),
-                            dst_stack_depth));
-                      }
+                    if (reg == rhs_reg)
+                      emission_path->add_event
+                        (new out_of_context_event(stmt,
+                        dst_point.get_location (),
+                        dst_point.get_fndecl (),
+                        dst_stack_depth));
                   }
               }
           }
-      }
-      break;
     }
+    break;
+  }
 
   /* Look for changes in dynamic extents, which will identify
      the creation of heap-based regions and alloca regions.  */
