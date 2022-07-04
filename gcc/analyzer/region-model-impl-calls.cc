@@ -480,7 +480,7 @@ region_model::impl_call_free (const call_details &cd)
     {
       /* If the ptr points to an underlying heap region, delete it,
 	 poisoning pointers.  */
-      unbind_region_and_descendents (freed_reg, POISON_KIND_FREED);
+      unbind_region_and_descendents (freed_reg, POISON_KIND_FREED, NULL);
       m_dynamic_extents.remove (freed_reg);
     }
 }
@@ -577,7 +577,7 @@ region_model::impl_call_operator_delete (const call_details &cd)
     {
       /* If the ptr points to an underlying heap region, delete it,
 	 poisoning pointers.  */
-      unbind_region_and_descendents (freed_reg, POISON_KIND_FREED);
+      unbind_region_and_descendents (freed_reg, POISON_KIND_FREED, NULL);
     }
 }
 
@@ -756,7 +756,7 @@ region_model::impl_call_realloc (const call_details &cd)
 
 	  /* If the ptr points to an underlying heap region, delete it,
 	     poisoning pointers.  */
-	  model->unbind_region_and_descendents (freed_reg, POISON_KIND_FREED);
+	  model->unbind_region_and_descendents (freed_reg, POISON_KIND_FREED, ctxt);
 	  model->m_dynamic_extents.remove (freed_reg);
 	}
 

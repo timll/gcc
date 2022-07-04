@@ -4357,7 +4357,7 @@ region_model::pop_frame (tree result_lvalue,
       set_value (result_dst_reg, retval, ctxt);
     }
 
-  unbind_region_and_descendents (frame_reg,POISON_KIND_POPPED_STACK);
+  unbind_region_and_descendents (frame_reg,POISON_KIND_POPPED_STACK, ctxt);
 }
 
 /* Get the number of frames in this region_model's stack.  */
@@ -4397,7 +4397,8 @@ region_model::get_frame_at_index (int index) const
 
 void
 region_model::unbind_region_and_descendents (const region *reg,
-					     enum poison_kind pkind)
+					     enum poison_kind pkind,
+               region_model_context *ctxt)
 {
   /* Gather a set of base regions to be unbound.  */
   hash_set<const region *> base_regs;
@@ -4413,7 +4414,7 @@ region_model::unbind_region_and_descendents (const region *reg,
     m_store.purge_cluster (*iter);
 
   /* Find any pointers to REG or its descendents; convert to poisoned.  */
-  poison_any_pointers_to_descendents (reg, pkind);
+  poison_any_pointers_to_descendents (reg, pkind, ctxt);
 
   /* Purge dynamic extents of any base regions in REG and below
      (e.g. VLAs and alloca stack regions).  */
@@ -4425,6 +4426,59 @@ region_model::unbind_region_and_descendents (const region *reg,
     }
 }
 
+/* Concrete subclass TODO.  */
+
+class stack_address_escapes_function
+: public pending_diagnostic_subclass<stack_address_escapes_function>
+{
+public:
+  stack_address_escapes_function (const svalue *sval, const region *reg, tree expr)
+  : m_sval(sval), m_reg (reg), m_expr (expr)
+  {}
+
+  const char *get_kind () const final override
+  {
+    return "stack_address_escpaes_function";
+  }
+
+  bool operator== (const stack_address_escapes_function &other) const
+  {
+    return m_expr == other.m_expr;
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_allocation_size;
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (562);
+
+    return warning_meta (rich_loc, m, get_controlling_option (),
+	       "stack address escapes function");
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final
+  override
+  {
+    if (m_expr)
+      return ev.formatted_print ("%qE escapes here", m_expr);
+    return ev.formatted_print ("escapes here");
+  }
+
+  void mark_interesting_stuff (interesting_t *interest) final override
+  {
+    interest->add_region_creation (m_reg);
+  }
+
+private:
+  const svalue *m_sval;
+  const region *m_reg;
+  tree m_expr;
+};
+
 /* Implementation of BindingVisitor.
    Update the bound svalues for regions below REG to use poisoned
    values instead.  */
@@ -4432,8 +4486,8 @@ region_model::unbind_region_and_descendents (const region *reg,
 struct bad_pointer_finder
 {
   bad_pointer_finder (const region *reg, enum poison_kind pkind,
-		      region_model_manager *mgr)
-  : m_reg (reg), m_pkind (pkind), m_mgr (mgr), m_count (0)
+		      region_model_manager *mgr, region_model *model, region_model_context *ctxt)
+  : m_reg (reg), m_pkind (pkind), m_mgr (mgr), m_model (model), m_ctxt (ctxt), m_count (0)
   {}
 
   void on_binding (const binding_key *, const svalue *&sval)
@@ -4447,6 +4501,12 @@ struct bad_pointer_finder
 	if (ptr_dst->descendent_of_p (m_reg)
 	    && ptr_dst != m_reg)
 	  {
+      if (m_ctxt)
+        {
+          tree expr = m_model->get_representative_tree (ptr_sval);
+          m_ctxt->warn (new stack_address_escapes_function (ptr_sval, ptr_dst, expr));
+        }
+
 	    sval = m_mgr->get_or_create_poisoned_svalue (m_pkind,
 							 sval->get_type ());
 	    ++m_count;
@@ -4457,6 +4517,8 @@ struct bad_pointer_finder
   const region *m_reg;
   enum poison_kind m_pkind;
   region_model_manager *const m_mgr;
+  region_model *m_model;
+  region_model_context *m_ctxt;
   int m_count;
 };
 
@@ -4466,9 +4528,9 @@ struct bad_pointer_finder
 
 int
 region_model::poison_any_pointers_to_descendents (const region *reg,
-						   enum poison_kind pkind)
+						   enum poison_kind pkind, region_model_context *ctxt)
 {
-  bad_pointer_finder bv (reg, pkind, m_mgr);
+  bad_pointer_finder bv (reg, pkind, m_mgr, this, ctxt);
   m_store.for_each_binding (bv);
   return bv.m_count;
 }

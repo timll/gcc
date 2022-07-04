@@ -766,7 +766,8 @@ class region_model
   }
 
   void unbind_region_and_descendents (const region *reg,
-				      enum poison_kind pkind);
+				      enum poison_kind pkind,
+              region_model_context *ctxt);
 
   bool can_merge_with_p (const region_model &other_model,
 			 const program_point &point,
@@ -836,7 +837,7 @@ class region_model
 					rejected_constraint **out);
 
   int poison_any_pointers_to_descendents (const region *reg,
-					  enum poison_kind pkind);
+					  enum poison_kind pkind, region_model_context *ctxt);
 
   void on_top_level_param (tree param, region_model_context *ctxt);
 

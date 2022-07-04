@@ -39,6 +39,7 @@ struct interesting_t
   void dump_to_pp (pretty_printer *pp, bool simple) const;
 
   auto_vec<const region *> m_region_creation;
+  auto_vec<const region *> m_region_assignment;
 };
 
 /* Various bundles of information used for generating more precise

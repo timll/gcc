@@ -2004,6 +2004,23 @@ diagnostic_manager::add_events_for_eedge (const path_builder &pb,
 	      }
 
 	  }
+
+      if (const gassign *assign = dyn_cast<const gassign *> (stmt))
+        if (interest)
+          {        
+            const region *lhs_reg = dst_state.m_region_model->get_lvalue (gimple_assign_lhs (assign), NULL);
+            unsigned i;
+            const region *reg;
+            FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
+              {
+                if (reg == lhs_reg)
+                  emission_path->add_region_creation_event
+                    (reg,
+                    src_point.get_location (),
+                    src_point.get_fndecl (),
+                    src_stack_depth);
+              }
+          }
       }
       break;
     }
