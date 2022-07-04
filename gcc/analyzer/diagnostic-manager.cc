@@ -2006,19 +2006,27 @@ diagnostic_manager::add_events_for_eedge (const path_builder &pb,
 	  }
 
       if (const gassign *assign = dyn_cast<const gassign *> (stmt))
-        if (interest)
-          {        
-            const region *lhs_reg = dst_state.m_region_model->get_lvalue (gimple_assign_lhs (assign), NULL);
-            unsigned i;
-            const region *reg;
-            FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
+        if (interest && src_state.m_region_model)
+          {
+            tree arg1 = gimple_assign_rhs1 (assign);
+            const svalue *lhs = src_state.m_region_model->get_rvalue (arg1, NULL);
+            if (const region_svalue *regsval = dyn_cast <const region_svalue *> (lhs))
               {
-                if (reg == lhs_reg)
-                  emission_path->add_region_creation_event
-                    (reg,
-                    src_point.get_location (),
-                    src_point.get_fndecl (),
-                    src_stack_depth);
+                const region *lhs_reg = regsval->get_pointee ();
+                unsigned i;
+                const region *reg;
+                debug_gimple_stmt ((gimple *) stmt);
+                FOR_EACH_VEC_ELT (interest->m_region_creation, i, reg)
+                  {
+                    reg->dump (false);
+                    lhs_reg->dump (false);
+                    if (reg->descendent_of_p (lhs_reg))
+                      emission_path->add_region_creation_event
+                        (reg,
+                        src_point.get_location (),
+                        src_point.get_fndecl (),
+                        src_stack_depth);
+                  }
               }
           }
       }
