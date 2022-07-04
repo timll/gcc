@@ -2906,11 +2906,27 @@ static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 			       bool is_struct)
 {
-  gcc_assert (TREE_CODE (cst) == INTEGER_CST);
   gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
-
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
-  unsigned HOST_WIDE_INT alloc_size = TREE_INT_CST_LOW (cst);
+
+  unsigned HOST_WIDE_INT alloc_size;
+  switch (TREE_CODE (cst))
+  {
+  default:
+    return false;
+  case INTEGER_CST:
+    alloc_size = TREE_INT_CST_LOW (cst);
+    break;
+  case REAL_CST:
+    {
+      const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
+      HOST_WIDE_INT i;
+      if (!real_isinteger (rv, &i) || i < 0)
+	return false;
+      alloc_size = i;
+    }
+    break;
+  }
 
   if (is_struct)
     return alloc_size >= pointee_size;

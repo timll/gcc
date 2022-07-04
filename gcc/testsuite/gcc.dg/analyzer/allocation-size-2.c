@@ -154,3 +154,17 @@ void test_13 (void)
   else
     free (ptr);
 }
+
+void test_14 (int32_t n)
+{
+  int32_t *ptr = malloc (n * 3.0); /* { dg-line malloc14 } */
+  free (ptr);  
+  /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc14 } */
+  /* { dg-message "'int32_t \\*' (\\\{aka 'int \\*'\\\})? here; 'sizeof \\(int32_t (\\\{aka int\\\})?\\)' is '4'" "note" { target *-*-* } malloc14 } */
+}
+
+void test_15 (int32_t n)
+{
+  int32_t *ptr = malloc (n * 4.0);
+  free (ptr);
+}
