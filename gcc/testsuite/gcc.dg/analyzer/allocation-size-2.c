@@ -168,3 +168,11 @@ void test_15 (int32_t n)
   int32_t *ptr = malloc (n * 4.0);
   free (ptr);
 }
+
+void test_16 (int32_t n)
+{
+  /* Should not emit a warning because we can not reason whether the result
+     of the floating-point arithmetic actually is a valid size or not.  */
+  int32_t *ptr = malloc (n * 3.1);
+  free (ptr);
+}

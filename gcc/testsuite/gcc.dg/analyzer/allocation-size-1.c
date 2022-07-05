@@ -124,14 +124,21 @@ void test_11 ()
   /* { dg-message "'int32_t \\*' (\\\{aka 'int \\*'\\\})? here; 'sizeof \\(int32_t (\\\{aka int\\\})?\\)' is '4'" "note" { target *-*-* } malloc11 } */
 }
 
-void test_12 (int32_t n)
+void test_12 ()
 {
   int32_t *ptr = malloc (4.0);
   free (ptr);
 }
 
-void test_13 (int32_t n)
+void test_13 ()
 {
   int32_t *ptr = malloc (4.7);
+  free (ptr);
+}
+
+void test_14 ()
+{
+  /* Test round towards zero.  */
+  int32_t *ptr = malloc (-0.9);
   free (ptr);
 }

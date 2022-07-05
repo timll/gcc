@@ -2904,7 +2904,7 @@ private:
 
 static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
-			       bool is_struct)
+                               bool is_struct, bool floor_real)
 {
   gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
@@ -2913,6 +2913,7 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
   switch (TREE_CODE (cst))
     {
     default:
+      /* Assume all unhandled operands are compatible.  */
       return true;
     case INTEGER_CST:
       alloc_size = TREE_INT_CST_LOW (cst);
@@ -2920,11 +2921,22 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
     case REAL_CST:
       {
         const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
-        if (real_isneg (rv))
-          return false;
-        REAL_VALUE_TYPE result;
-        real_floor (&result, VOIDmode, rv);
-        alloc_size = real_to_integer (&result);
+        if (floor_real)
+          {
+            /* If the size is constant real at compile-time,
+               we can model the conversion.  */
+            alloc_size = real_to_integer (rv);
+          }
+        else
+          {
+            /* On expressions where the value of one operator isn't
+               representable as an integer or is negative, we give up and
+               just assume that the programmer knows what they are doing.  */
+            HOST_WIDE_INT i;
+            if (real_isneg (rv) || !real_isinteger (rv, &i))
+              return true;
+            alloc_size = i;
+          }
       }
       break;
     }
@@ -2940,7 +2952,7 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree)
 {
-  return capacity_compatible_with_type (cst, pointee_size_tree, false);
+  return capacity_compatible_with_type (cst, pointee_size_tree, false, false);
 }
 
 /* Checks whether SVAL could be a multiple of SIZE_CST.
@@ -3165,7 +3177,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 		= as_a <const constant_svalue *> (capacity);
 	tree cst_cap = cst_cap_sval->get_constant ();
 	if (!capacity_compatible_with_type (cst_cap, pointee_size_tree,
-					    is_struct))
+					    is_struct, true))
 	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
 						   cst_cap));
       }
