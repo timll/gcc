@@ -2911,22 +2911,26 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
 
   unsigned HOST_WIDE_INT alloc_size;
   switch (TREE_CODE (cst))
-  {
-  default:
-    return false;
-  case INTEGER_CST:
-    alloc_size = TREE_INT_CST_LOW (cst);
-    break;
-  case REAL_CST:
     {
-      const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
-      HOST_WIDE_INT i;
-      if (!real_isinteger (rv, &i) || i < 0)
-	return false;
-      alloc_size = i;
+    default:
+      return true;
+    case INTEGER_CST:
+      alloc_size = TREE_INT_CST_LOW (cst);
+      break;
+    case REAL_CST:
+      {
+        const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
+        if (real_isneg (rv))
+          return false;
+        REAL_VALUE_TYPE *result;
+        real_floor (result, NULL, rv);
+        alloc_size = real_to_integer (rv);
+      }
+      break;
     }
-    break;
-  }
+
+  if (i == 0)
+    return true;
 
   if (is_struct)
     return alloc_size >= pointee_size;

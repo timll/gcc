@@ -129,3 +129,9 @@ void test_12 (int32_t n)
   int32_t *ptr = malloc (4.0);
   free (ptr);
 }
+
+void test_13 (int32_t n)
+{
+  int32_t *ptr = malloc (4.7);
+  free (ptr);
+}
