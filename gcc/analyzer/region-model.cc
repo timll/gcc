@@ -2904,7 +2904,7 @@ private:
 
 static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
-                               bool is_struct, bool floor_real)
+			       bool is_struct, bool floor_real)
 {
   gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
   unsigned HOST_WIDE_INT pointee_size = TREE_INT_CST_LOW (pointee_size_tree);
@@ -2920,23 +2920,23 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
       break;
     case REAL_CST:
       {
-        const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
-        if (floor_real)
-          {
-            /* If the size is constant real at compile-time,
-               we can model the conversion.  */
-            alloc_size = real_to_integer (rv);
-          }
-        else
-          {
-            /* On expressions where the value of one operator isn't
-               representable as an integer or is negative, we give up and
-               just assume that the programmer knows what they are doing.  */
-            HOST_WIDE_INT i;
-            if (real_isneg (rv) || !real_isinteger (rv, &i))
-              return true;
-            alloc_size = i;
-          }
+	const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
+	if (floor_real)
+	  {
+	    /* If the size is constant real at compile-time,
+	       we can model the conversion.  */
+	    alloc_size = real_to_integer (rv);
+	  }
+	else
+	  {
+	    /* On expressions where the value of one operator isn't
+	       representable as an integer or is negative, we give up and
+	       just assume that the programmer knows what they are doing.  */
+	    HOST_WIDE_INT i;
+	    if (real_isneg (rv) || !real_isinteger (rv, &i))
+	      return true;
+	    alloc_size = i;
+	  }
       }
       break;
     }
