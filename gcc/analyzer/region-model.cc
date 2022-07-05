@@ -2923,7 +2923,7 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
         if (real_isneg (rv))
           return false;
         REAL_VALUE_TYPE *result;
-        real_floor (result, NULL, rv);
+        real_floor (result, VOIDmode, rv);
         alloc_size = real_to_integer (rv);
       }
       break;
