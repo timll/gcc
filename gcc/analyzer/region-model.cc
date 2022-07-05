@@ -2922,9 +2922,9 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
         const REAL_VALUE_TYPE *rv = TREE_REAL_CST_PTR (cst);
         if (real_isneg (rv))
           return false;
-        REAL_VALUE_TYPE *result;
-        real_floor (result, VOIDmode, rv);
-        alloc_size = real_to_integer (rv);
+        REAL_VALUE_TYPE result;
+        real_floor (&result, VOIDmode, rv);
+        alloc_size = real_to_integer (&result);
       }
       break;
     }
