@@ -2929,7 +2929,7 @@ capacity_compatible_with_type (tree cst, tree pointee_size_tree,
       break;
     }
 
-  if (i == 0)
+  if (alloc_size == 0)
     return true;
 
   if (is_struct)
