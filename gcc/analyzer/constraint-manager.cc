@@ -50,6 +50,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/constraint-manager.h"
 #include "analyzer/analyzer-selftests.h"
 #include "tree-pretty-print.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -287,6 +288,31 @@ range::below_lower_bound (tree rhs_const) const
 			    m_lower_bound.m_closed ? LT_EXPR : LE_EXPR,
 			    m_lower_bound.m_constant).is_true ();
 }
+/* Return true if RHS_CONST is below the lower bound of this range.  */
+
+bool
+range::above_lower_bound (tree rhs_const) const
+{
+  if (!m_lower_bound.m_constant)
+    return false;
+
+  return compare_constants (rhs_const,
+			    m_lower_bound.m_closed ? GT_EXPR : GE_EXPR,
+			    m_lower_bound.m_constant).is_true ();
+}
+
+/* Return true if RHS_CONST is above the upper bound of this range.  */
+
+bool
+range::below_upper_bound (tree rhs_const) const
+{
+  if (!m_upper_bound.m_constant)
+    return false;
+
+  return compare_constants (rhs_const,
+			    m_upper_bound.m_closed ? LT_EXPR : LE_EXPR,
+			    m_upper_bound.m_constant).is_true ();
+}
 
 /* Return true if RHS_CONST is above the upper bound of this range.  */
 
@@ -299,6 +325,12 @@ range::above_upper_bound (tree rhs_const) const
   return compare_constants (rhs_const,
 			    m_upper_bound.m_closed ? GT_EXPR : GE_EXPR,
 			    m_upper_bound.m_constant).is_true ();
+}
+
+tree
+range::get_upper_bound () const
+{
+  return m_upper_bound.m_constant; 
 }
 
 /* Attempt to add B to the bound of the given kind of this range.

@@ -74,6 +74,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -654,6 +655,36 @@ private:
   tree m_count_cst;
 };
 
+void region_model::prepare_bounds_check (tree expr,
+                                         enum tree_code op,
+                                         region_model_context *ctxt) const
+{
+  switch (op)
+  {
+  case ARRAY_REF:
+    {
+      tree array = TREE_OPERAND (expr, 0);
+      tree index = TREE_OPERAND (expr, 1);
+
+      const region *array_reg = get_lvalue (array, ctxt);
+      const svalue *index_sval = get_rvalue (index, ctxt);
+      check_array_bounds (array_reg, index_sval, ctxt);
+    }
+    break;
+  // case MEM_REF:
+  //   {
+  //     	tree ptr = TREE_OPERAND (expr, 0);
+  //       tree offset = TREE_OPERAND (expr, 1);
+  //       const svalue *ptr_sval = get_rvalue (ptr, ctxt);
+  //       const svalue *offset_sval = get_rvalue (offset, ctxt);
+  //       const region *star_ptr = deref_rvalue (ptr_sval, ptr, ctxt);
+
+  //   }
+  default:
+    break;
+  }
+}
+
 /* If ASSIGN is a stmt that can be modelled via
      set_value (lhs_reg, SVALUE, CTXT)
    for some SVALUE, get the SVALUE.
@@ -713,17 +744,20 @@ region_model::get_gassign_result (const gassign *assign,
     case ADDR_EXPR: /* LHS = &RHS;  */
     case BIT_FIELD_REF:
     case COMPONENT_REF: /* LHS = op0.op1;  */
-    case MEM_REF:
     case REAL_CST:
     case COMPLEX_CST:
     case VECTOR_CST:
     case INTEGER_CST:
-    case ARRAY_REF:
     case SSA_NAME: /* LHS = VAR; */
     case VAR_DECL: /* LHS = VAR; */
     case PARM_DECL:/* LHS = VAR; */
     case REALPART_EXPR:
     case IMAGPART_EXPR:
+      return get_rvalue (rhs1, ctxt);
+
+    case ARRAY_REF:
+    case MEM_REF:
+      prepare_bounds_check (rhs1, op, ctxt);
       return get_rvalue (rhs1, ctxt);
 
     case ABS_EXPR:
@@ -2015,6 +2049,180 @@ region_model::handle_phi (const gphi *phi,
     ctxt->on_phi (phi, rhs);
 }
 
+/* Concrete subclass for casts of pointers that lead to trailing bytes.  */
+
+class out_of_bounds
+: public pending_diagnostic_subclass<out_of_bounds>
+{
+public:
+  out_of_bounds (const region *reg, tree size_expr, tree index)
+  : m_reg (reg), m_size_expr (size_expr), m_index (index)
+  {}
+
+  const char *get_kind () const final override
+  {
+    return "out_of_bounds";
+  }
+
+  bool operator== (const out_of_bounds &other) const
+  {
+    return m_reg == other.m_reg
+           && pending_diagnostic::same_tree_p (m_size_expr, other.m_size_expr);
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_allocation_size;
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (125);
+
+    return warning_meta (rich_loc, m, get_controlling_option (),
+                         "access out-of-bounds");
+  }
+
+  label_text
+  describe_region_creation_event (const evdesc::region_creation &ev) final
+  override
+  {
+    m_allocation_event = &ev;
+    if (m_size_expr)
+      {
+        if (TREE_CODE (m_size_expr) == INTEGER_CST)
+          return ev.formatted_print ("allocated %E bytes here", m_size_expr);
+        else
+          return ev.formatted_print ("allocated %qE bytes here", m_size_expr);
+      }
+
+    return ev.formatted_print ("allocated here");
+  }
+
+  void mark_interesting_stuff (interesting_t *interest) final override
+  {
+    interest->add_region_creation (m_reg);
+  }
+
+protected:
+  const region *m_reg;
+  const tree m_size_expr;
+  const tree m_index;
+  const evdesc::region_creation *m_allocation_event;
+};
+
+class bounded_out_of_bounds : public out_of_bounds
+{
+public:
+  bounded_out_of_bounds (const region *reg, tree size_expr, tree index)
+    : out_of_bounds (reg, size_expr, index)
+  {}
+
+
+  label_text describe_final_event (const evdesc::final_event &ev) final
+  override
+  {
+    return ev.formatted_print ("index is bounded by %qE, which is greater than"
+                               " the number of elements in the buffer", m_index);
+  }
+};
+
+class index_out_of_bounds : public out_of_bounds
+{
+public:
+  index_out_of_bounds (const region *reg, tree size_expr, tree index)
+    : out_of_bounds (reg, size_expr, index)
+  {}
+
+  label_text describe_final_event (const evdesc::final_event &ev) final
+  override
+  {
+    return ev.formatted_print ("index is %qE here, which is greater than the number of"
+                               " elements in the buffer", m_index);
+  }
+};
+
+void region_model::check_bounds (const region *buf_reg,
+                                 tree type,
+                                const svalue *index_sval,
+                                region_model_context *ctxt) const
+{
+  if (!ctxt)
+    return;
+  
+  tree pointee_type = TREE_TYPE (type);
+  if (pointee_type == NULL_TREE || VOID_TYPE_P (pointee_type)
+      || TYPE_SIZE_UNIT (pointee_type) == NULL_TREE)
+    return;
+  tree pointee_size = size_in_bytes (pointee_type);
+
+  // xxx
+  const svalue *cap = get_capacity (buf_reg);
+  if (const constant_svalue *cst_size
+        = dyn_cast <const constant_svalue *> (cap))
+    {
+      tree cst_size_tree = cst_size->get_constant ();
+      if (TREE_CODE (cst_size_tree) != INTEGER_CST)
+        return;
+      tree max_i_plus_1 = fold_binary (TRUNC_DIV_EXPR,
+                                       long_unsigned_type_node,
+                                       cst_size_tree, pointee_size);
+      if (!max_i_plus_1)
+        return;
+      
+      /* If we know the index value, warn here. */
+      if (const constant_svalue *cst_index_sval
+            = dyn_cast <const constant_svalue *> (index_sval))
+        {
+          tree cst_i = cst_index_sval->get_constant ();
+          tree cond = fold_binary (LT_EXPR, boolean_type_node, cst_i,
+                                   max_i_plus_1);
+          if (cond == boolean_false_node)
+            {
+              tree size_expr = get_representative_tree (cap);
+              ctxt->warn (new index_out_of_bounds (buf_reg, size_expr, cst_i));
+              return;
+            }
+        }
+
+      /* If no warning was emitted, check for weird bound check.  */
+      equiv_class_id id (-1);
+      if (m_constraints->get_equiv_class_by_svalue (index_sval, &id))
+        {
+          range r = m_constraints->get_ec_bounds (id);
+          if (!r.above_upper_bound (max_i_plus_1))
+          {
+            tree size_expr = get_representative_tree (cap);
+            tree bound = r.get_upper_bound ();
+            ctxt->warn (new bounded_out_of_bounds (buf_reg, size_expr, bound));
+          }
+        }
+    }
+}
+
+void region_model::check_buffer_bounds (const svalue *ptr_sval,
+                                        const svalue *index_sval,
+                                        region_model_context *ctxt) const
+{
+  tree type = ptr_sval->get_type ();
+  if (!type || !POINTER_TYPE_P (type))
+    return;
+  if (const region_svalue *reg_sval
+        = dyn_cast<const region_svalue *> (ptr_sval))
+    check_bounds (reg_sval->get_pointee (), type, index_sval, ctxt);
+}
+
+void region_model::check_array_bounds (const region *array_reg,
+                                       const svalue *index_sval,
+                                       region_model_context *ctxt) const
+{
+  tree type = array_reg->get_type ();
+  if (!type || TREE_CODE (type) != ARRAY_TYPE)
+    return;
+  check_bounds (array_reg, type, index_sval, ctxt);
+}
+
 /* Implementation of region_model::get_lvalue; the latter adds type-checking.
 
    Get the id of the region for PV within this region_model,
@@ -2040,6 +2248,7 @@ region_model::get_lvalue_1 (path_var pv, region_model_context *ctxt) const
 
 	const region *array_reg = get_lvalue (array, ctxt);
 	const svalue *index_sval = get_rvalue (index, ctxt);
+  check_array_bounds (array_reg, index_sval, ctxt);
 	return m_mgr->get_element_region (array_reg,
 					  TREE_TYPE (TREE_TYPE (array)),
 					  index_sval);
@@ -2066,6 +2275,7 @@ region_model::get_lvalue_1 (path_var pv, region_model_context *ctxt) const
 	tree offset = TREE_OPERAND (expr, 1);
 	const svalue *ptr_sval = get_rvalue (ptr, ctxt);
 	const svalue *offset_sval = get_rvalue (offset, ctxt);
+  check_buffer_bounds (ptr_sval, offset_sval, ctxt);
 	const region *star_ptr = deref_rvalue (ptr_sval, ptr, ctxt);
 	return m_mgr->get_offset_region (star_ptr,
 					 TREE_TYPE (expr),
@@ -3630,7 +3840,7 @@ tristate
 region_model::eval_condition (tree lhs,
 			      enum tree_code op,
 			      tree rhs,
-			      region_model_context *ctxt)
+			      region_model_context *ctxt) const
 {
   /* For now, make no attempt to model constraints on floating-point
      values.  */

@@ -719,7 +719,7 @@ class region_model
   tristate eval_condition (tree lhs,
 			   enum tree_code op,
 			   tree rhs,
-			   region_model_context *ctxt);
+			   region_model_context *ctxt) const;
   bool add_constraint (tree lhs, enum tree_code op, tree rhs,
 		       region_model_context *ctxt);
   bool add_constraint (tree lhs, enum tree_code op, tree rhs,
@@ -867,6 +867,14 @@ class region_model
 			      region_model_context *ctxt) const;
   void check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 			  region_model_context *ctxt) const;
+  void prepare_bounds_check (tree expr, enum tree_code op,
+                             region_model_context *ctxt) const;
+  void check_array_bounds (const region *array_reg, const svalue *index_sval,
+                           region_model_context *ctxt) const;
+  void check_buffer_bounds (const svalue *ptr_sval, const svalue *index_sval,
+                            region_model_context *ctxt) const;
+  void check_bounds (const region *reg, tree type, const svalue *index_sval,
+                     region_model_context *ctxt) const;
 
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
