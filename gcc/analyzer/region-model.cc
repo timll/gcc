@@ -74,6 +74,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
+#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -1533,6 +1534,186 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
     unknown_side_effects = true;
 
   return unknown_side_effects;
+}
+
+class region_overlap
+: public pending_diagnostic_subclass<region_overlap>
+{
+public:
+  region_overlap (const region *reg, tree num_bytes, tree src_offset,
+                  tree dst_offset, tree overlap_bytes, tree overlap_offset)
+  : m_reg (reg), m_num_bytes (num_bytes), m_src_offset (src_offset),
+    m_dst_offset (dst_offset), m_overlap_bytes (overlap_bytes),
+    m_overlap_offset (overlap_offset)
+  {}
+
+  const char *get_kind () const final override
+  {
+    return "write_to_const_diagnostic";
+  }
+
+  bool operator== (const region_overlap &other) const
+  {
+    return (m_reg == other.m_reg);
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_write_to_const;
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (474);
+    return warning_meta (rich_loc, m, get_controlling_option (),
+                         "accessing %E bytes at offset %E and %E overlaps %E bytes at offset %E",
+                         m_num_bytes, m_src_offset, m_dst_offset, m_overlap_bytes, m_overlap_offset);
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+	  return ev.formatted_print ("write");
+  }
+
+private:
+  const region *m_reg;
+  tree m_num_bytes;
+  tree m_src_offset;
+  tree m_dst_offset;
+  tree m_overlap_bytes;
+  tree m_overlap_offset;
+};
+
+/* Return true if OUT_PARENT and OUT_OFFSET could be set using REG.  */
+
+static bool
+maybe_get_parent_and_offset(const region *reg, const region **out_parent,
+                            tree *out_offset)
+{
+  switch (reg->get_kind ())
+    {
+    case RK_HEAP_ALLOCATED:
+    case RK_ALLOCA:
+    case RK_DECL:
+      *out_parent = reg;
+      *out_offset = build_zero_cst (size_type_node);
+      return true;
+    case RK_OFFSET:
+      {
+        const offset_region *offset_reg = as_a <const offset_region *> (reg);
+        *out_parent = offset_reg->get_parent_region ();
+        const svalue *offset = offset_reg->get_byte_offset ();
+        if (const constant_svalue *cst_offset
+              = dyn_cast <const constant_svalue *> (offset))
+          {
+            *out_offset = cst_offset->get_constant ();
+            return true;
+          }
+        else
+          {
+            return false;
+          }
+      }
+    case RK_ELEMENT:
+      {
+        const element_region *element_reg
+          = as_a <const element_region *> (reg);
+        *out_parent = element_reg->get_parent_region ();
+        const svalue *index = element_reg->get_index ();
+        if (const constant_svalue *cst_index
+              = dyn_cast <const constant_svalue *> (index))
+          {
+            tree type = element_reg->get_type ();
+            if (type == NULL_TREE || TYPE_SIZE_UNIT (type) == NULL_TREE)
+              return false;
+
+            tree size = size_in_bytes (type);
+            tree index_cst = cst_index->get_constant ();
+            tree result = fold_binary (MULT_EXPR, size_type_node,
+                                      index_cst, size);
+            if (result)
+              {
+                *out_offset = result;
+                return true;
+              }
+            else
+              {
+                return false;
+              }
+          }
+        else
+          {
+            return false;
+          }
+      }
+    default:
+      return false;
+    }
+
+  return false;
+}
+
+/* Checks whether SRC + NUM_SVAL overlaps DST and might emit a warning.  */
+
+void region_model::check_region_overlap (const region *src,
+                                         const region *dst,
+                                         const svalue *num_sval,
+                                         region_model_context *ctxt) const
+{
+  if (const constant_svalue *cst_sval
+        = dyn_cast <const constant_svalue *> (num_sval))
+    {
+      tree num = cst_sval->get_constant ();
+
+      const region *src_parent_reg;
+      tree src_offset;
+      const region *dst_parent_reg;
+      tree dst_offset;
+      if (maybe_get_parent_and_offset (src, &src_parent_reg, &src_offset)
+          && maybe_get_parent_and_offset (dst, &dst_parent_reg, &dst_offset)
+          && src_parent_reg == dst_parent_reg)
+        {
+          tree last_byte;
+          tree overlap;
+          if (!num)
+            {
+              overlap = fold_binary (EQ_EXPR, boolean_type_node,
+                                     src_offset, dst_offset);
+            }
+          else
+            {
+              tree srcledst = fold_binary (LE_EXPR, boolean_type_node,
+                                          src_offset, dst_offset);
+              if (srcledst == boolean_true_node)
+                {
+                  last_byte = fold_binary (PLUS_EXPR, size_type_node,
+                                                src_offset, num);
+                  overlap = fold_binary (GT_EXPR, boolean_type_node,
+                                         last_byte, dst_offset);
+                  overlap_int = fold_binary (MINUS_EXPR, size_type_node,
+                                              last_byte, dst_offset);
+                }
+              else if (srcledst == boolean_false_node)
+                {
+                  last_byte = fold_binary (PLUS_EXPR, size_type_node,
+                                           dst_offset, num);
+                  overlap = fold_binary (GT_EXPR, boolean_type_node,
+                                         last_byte, src_offset);
+                  overlap_int = fold_binary (MINUS_EXPR, size_type_node,
+                                              last_byte, src_offset);
+                }
+            }
+
+          if (overlap == boolean_true_node)
+            {
+              tree overlap_offset = fold_binary (MINUS_EXPR, size_type_node,
+                                                 num, overlap_int);
+              ctxt->warn (new region_overlap (src, num, src_offset, dst_offset,
+                                              overlap_int, overlap_offset));
+            }
+        }
+    }
 }
 
 /* Update this model for the CALL stmt, using CTXT to report any
