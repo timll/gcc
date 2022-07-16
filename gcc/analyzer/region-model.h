@@ -732,6 +732,7 @@ class region_model
 					  region_model_context *ctxt);
 
   tree get_representative_tree (const svalue *sval) const;
+  tree get_representative_tree (const region *reg) const;
   path_var
   get_representative_path_var (const svalue *sval,
 			       svalue_set *visited) const;
@@ -868,11 +869,10 @@ class region_model
   void check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 			  region_model_context *ctxt) const;
 
-void check_region_overlap (const region *src,
-                             const region *dest,
+  void check_region_overlap (const region *src, unsigned src_idx,
+                             const region *dst, unsigned dst_idx,
                              const svalue *num_sval,
-                             region_model_context *ctxt) const;
-
+                             const call_details &cd) const;
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
 						tree callee_fndecl,

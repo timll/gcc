@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+
+  /* To make sure memcpy is still here when we run, */
 typedef void * (*memcpy_t) (void *dst, const void *src, size_t n);
   
 static memcpy_t __attribute__((noinline))

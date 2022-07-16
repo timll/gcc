@@ -516,7 +516,7 @@ region_model::impl_call_memcpy (const call_details &cd)
   const region *src_reg = deref_rvalue (src_ptr_sval, cd.get_arg_tree (1),
 					cd.get_ctxt ());
 
-  check_region_overlap (src_reg, dest_reg, num_bytes_sval, cd.get_ctxt ());
+  check_region_overlap (src_reg, 0, dest_reg, 1, num_bytes_sval, cd);
 
   cd.maybe_set_lhs (dest_ptr_sval);
 
