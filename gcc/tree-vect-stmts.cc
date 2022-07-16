@@ -1638,8 +1638,10 @@ vect_finish_stmt_generation (vec_info *vinfo,
 	      && ((is_gimple_assign (vec_stmt)
 		   && !is_gimple_reg (gimple_assign_lhs (vec_stmt)))
 		  || (is_gimple_call (vec_stmt)
-		      && !(gimple_call_flags (vec_stmt)
-			   & (ECF_CONST|ECF_PURE|ECF_NOVOPS)))))
+		      && (!(gimple_call_flags (vec_stmt)
+			    & (ECF_CONST|ECF_PURE|ECF_NOVOPS))
+			  || (gimple_call_lhs (vec_stmt)
+			      && !is_gimple_reg (gimple_call_lhs (vec_stmt)))))))
 	    {
 	      tree new_vdef = copy_ssa_name (vuse, vec_stmt);
 	      gimple_set_vdef (vec_stmt, new_vdef);
@@ -4245,6 +4247,14 @@ vectorizable_simd_clone_call (vec_info *vinfo, stmt_vec_info stmt_info,
 
   if (!vec_stmt) /* transformation not required.  */
     {
+      /* When the original call is pure or const but the SIMD ABI dictates
+	 an aggregate return we will have to use a virtual definition and
+	 in a loop eventually even need to add a virtual PHI.  That's
+	 not straight-forward so allow to fix this up via renaming.  */
+      if (gimple_call_lhs (stmt)
+	  && !gimple_vdef (stmt)
+	  && TREE_CODE (TREE_TYPE (TREE_TYPE (bestn->decl))) == ARRAY_TYPE)
+	vinfo->any_known_not_updated_vssa = true;
       STMT_VINFO_SIMD_CLONE_INFO (stmt_info).safe_push (bestn->decl);
       for (i = 0; i < nargs; i++)
 	if ((bestn->simdclone->args[i].arg_type
@@ -8978,6 +8988,9 @@ vectorizable_load (vec_info *vinfo,
 	  && alignment_support_scheme != dr_aligned)
 	dump_printf_loc (MSG_NOTE, vect_location,
 			 "Vectorizing an unaligned access.\n");
+
+      if (memory_access_type == VMAT_LOAD_STORE_LANES)
+	vinfo->any_known_not_updated_vssa = true;
 
       STMT_VINFO_TYPE (stmt_info) = load_vec_info_type;
       vect_model_load_cost (vinfo, stmt_info, ncopies, vf, memory_access_type,

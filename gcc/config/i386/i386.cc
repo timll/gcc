@@ -1024,6 +1024,16 @@ ix86_function_ok_for_sibcall (tree decl, tree exp)
 	 return false;
     }
 
+  /* Disable sibcall if callee has indirect_return attribute and
+     caller doesn't since callee will return to the caller's caller
+     via an indirect jump.  */
+  if (((flag_cf_protection & (CF_RETURN | CF_BRANCH))
+       == (CF_RETURN | CF_BRANCH))
+      && lookup_attribute ("indirect_return", TYPE_ATTRIBUTES (type))
+      && !lookup_attribute ("indirect_return",
+			    TYPE_ATTRIBUTES (TREE_TYPE (cfun->decl))))
+    return false;
+
   /* Otherwise okay.  That also includes certain types of indirect calls.  */
   return true;
 }
@@ -20982,6 +20992,19 @@ ix86_rtx_costs (rtx x, machine_mode mode, int outer_code_i, int opno,
 	  return true;
 	}
 
+      if (SCALAR_INT_MODE_P (GET_MODE (op0))
+	  && GET_MODE_SIZE (GET_MODE (op0)) > UNITS_PER_WORD)
+	{
+	  if (op1 == const0_rtx)
+	    *total = cost->add
+		     + rtx_cost (op0, GET_MODE (op0), outer_code, opno, speed);
+	  else
+	    *total = 3*cost->add
+		     + rtx_cost (op0, GET_MODE (op0), outer_code, opno, speed)
+		     + rtx_cost (op1, GET_MODE (op0), outer_code, opno, speed);
+	  return true;
+	}
+
       /* The embedded comparison operand is completely free.  */
       if (!general_operand (op0, GET_MODE (op0)) && op1 == const0_rtx)
 	*total = 0;
@@ -23991,6 +24014,7 @@ ix86_optab_supported_p (int op, machine_mode mode1, machine_mode,
     case ldexp_optab:
     case scalb_optab:
     case round_optab:
+    case lround_optab:
       return opt_type == OPTIMIZE_FOR_SPEED;
 
     case rint_optab:

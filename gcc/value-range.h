@@ -73,12 +73,12 @@ class vrange
   template <typename T> friend bool is_a (vrange &);
   friend class Value_Range;
 public:
+  virtual void accept (const class vrange_visitor &v) const = 0;
   virtual void set (tree, tree, value_range_kind = VR_RANGE);
   virtual tree type () const;
   virtual bool supports_type_p (tree type) const;
   virtual void set_varying (tree type);
   virtual void set_undefined ();
-  virtual void dump (FILE * = stderr) const = 0;
   virtual bool union_ (const vrange &);
   virtual bool intersect (const vrange &);
   virtual bool singleton_p (tree *result = NULL) const;
@@ -95,9 +95,9 @@ public:
   vrange& operator= (const vrange &);
   bool operator== (const vrange &) const;
   bool operator!= (const vrange &r) const { return !(*this == r); }
+  void dump (FILE *) const;
 
   enum value_range_kind kind () const;		// DEPRECATED
-  void debug () const;
 
 protected:
   ENUM_BITFIELD(value_range_kind) m_kind : 8;
@@ -148,7 +148,7 @@ public:
 
   // Misc methods.
   virtual bool fits_p (const vrange &r) const override;
-  virtual void dump (FILE * = stderr) const override;
+  virtual void accept (const vrange_visitor &v) const override;
 
   // Nonzero masks.
   wide_int get_nonzero_bits () const;
@@ -201,10 +201,9 @@ private:
 
   void irange_set_1bit_anti_range (tree, tree);
   bool varying_compatible_p () const;
-  void set_nonzero_bits (tree bits) { m_nonzero_mask = bits; }
+  void set_nonzero_bits (tree mask);
   bool intersect_nonzero_bits (const irange &r);
   bool union_nonzero_bits (const irange &r);
-  void dump_bitmasks (FILE *) const;
 
   bool intersect (const wide_int& lb, const wide_int& ub);
   unsigned char m_num_ranges;
@@ -250,7 +249,7 @@ class unsupported_range : public vrange
 {
 public:
   unsupported_range ();
-  virtual void dump (FILE *) const override;
+  virtual void accept (const vrange_visitor &v) const override;
 };
 
 // is_a<> and as_a<> implementation for vrange.
@@ -298,6 +297,13 @@ is_a <irange> (vrange &v)
   return v.m_discriminator == VR_IRANGE;
 }
 
+class vrange_visitor
+{
+public:
+  virtual void visit (const irange &) const { }
+  virtual void visit (const unsupported_range &) const { }
+};
+
 // This is a special int_range<1> with only one pair, plus
 // VR_ANTI_RANGE magic to describe slightly more than can be described
 // in one pair.  It is described in the code as a "legacy range" (as
@@ -329,7 +335,7 @@ public:
   bool operator!= (const Value_Range &r) const;
   operator vrange &();
   operator const vrange &() const;
-  void dump (FILE *out = stderr) const;
+  void dump (FILE *) const;
   static bool supports_type_p (tree type);
 
   // Convenience methods for vrange compatability.
@@ -348,6 +354,7 @@ public:
   bool zero_p () const { return m_vrange->zero_p (); }
   wide_int lower_bound () const; // For irange/prange compatability.
   wide_int upper_bound () const; // For irange/prange compatability.
+  void accept (const vrange_visitor &v) const { m_vrange->accept (v); }
 private:
   void init (tree type);
   unsupported_range m_unsupported;
@@ -555,7 +562,8 @@ irange::varying_compatible_p () const
   signop sign = TYPE_SIGN (t);
   if (INTEGRAL_TYPE_P (t))
     return (wi::to_wide (l) == wi::min_value (prec, sign)
-	    && wi::to_wide (u) == wi::max_value (prec, sign));
+	    && wi::to_wide (u) == wi::max_value (prec, sign)
+	    && !m_nonzero_mask);
   if (POINTER_TYPE_P (t))
     return (wi::to_wide (l) == 0
 	    && wi::to_wide (u) == wi::max_value (prec, sign));
