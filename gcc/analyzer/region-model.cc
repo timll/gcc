@@ -1281,7 +1281,7 @@ public:
 
   const char *get_kind () const final override
   {
-    return "write_to_const_diagnostic";
+    return "restrict_diagnostic";
   }
 
   bool operator== (const restrict_alias &other) const
@@ -1292,7 +1292,7 @@ public:
 
   int get_controlling_option () const final override
   {
-    return OPT_Wanalyzer_write_to_const;
+    return OPT_Wanalyzer_restrict;
   }
 
   bool emit (rich_location *rich_loc) override
@@ -1320,15 +1320,16 @@ class region_overlap
 : public restrict_alias
 {
 public:
-  region_overlap (tree src_tree, tree dst_tree,
-		  tree overlapping_bytes, tree fndecl)
-  : restrict_alias (src_tree, dst_tree),
+  region_overlap (tree src_tree, tree dst_tree, tree num,
+                  tree overlapping_bytes, tree fndecl)
+  : restrict_alias (src_tree, dst_tree), m_num (num),
     m_overlapping_bytes (overlapping_bytes), m_fndecl (fndecl)
   {}
 
   bool operator== (const region_overlap &other) const
   {
     return restrict_alias::operator==(other)
+	   && pending_diagnostic::same_tree_p (m_num, other.m_num)
 	   && pending_diagnostic::same_tree_p (m_overlapping_bytes,
 					       other.m_overlapping_bytes)
 	   && pending_diagnostic::same_tree_p (m_fndecl, other.m_fndecl);
@@ -1362,13 +1363,15 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    if (m_src_tree && m_dst_tree && m_overlapping_bytes)
-      return ev.formatted_print ("%qE and %qE overlap %E bytes",
-				 m_src_tree, m_dst_tree, m_overlapping_bytes);
-    return ev.formatted_print ("source and destination buffer overlap here");
+    if (m_num && m_src_tree && m_dst_tree && m_overlapping_bytes)
+      return ev.formatted_print ("Copying %E bytes from %qE to %qE overlaps"
+                                 " %E bytes", m_num, m_src_tree, m_dst_tree,
+                                 m_overlapping_bytes);
+    return ev.formatted_print ("source and destination buffer overlap");
   }
 
 private:
+  tree m_num;
   tree m_overlapping_bytes;
   tree m_fndecl;
 };
@@ -1510,7 +1513,7 @@ void region_model::check_region_overlap (const region *src,
 	      tree dst_tree = cd.get_arg_tree (dst_idx);
 	      tree overlapping_bytes = fold_binary (MINUS_EXPR, size_type_node,
 						    last_byte, buf2);
-	      ctxt->warn (new region_overlap (src_tree, dst_tree,
+	      ctxt->warn (new region_overlap (src_tree, dst_tree, num,
 					      overlapping_bytes,
 					      cd.get_fndecl_for_call ()));
 	    }
@@ -1689,6 +1692,10 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	  case BUILT_IN_MEMCPY:
 	  case BUILT_IN_MEMCPY_CHK:
 	    impl_call_memcpy (cd);
+	    return false;
+	  case BUILT_IN_MEMPCPY:
+	  case BUILT_IN_MEMPCPY_CHK:
+	    impl_call_mempcpy (cd);
 	    return false;
 	  case BUILT_IN_MEMSET:
 	  case BUILT_IN_MEMSET_CHK:

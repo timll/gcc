@@ -502,7 +502,6 @@ region_model::impl_call_malloc (const call_details &cd)
 }
 
 /* Handle the on_call_pre part of "memcpy" and "__builtin_memcpy".  */
-// TODO: complain about overlapping src and dest.
 
 void
 region_model::impl_call_memcpy (const call_details &cd)
@@ -519,6 +518,39 @@ region_model::impl_call_memcpy (const call_details &cd)
   check_region_overlap (src_reg, 0, dest_reg, 1, num_bytes_sval, cd);
 
   cd.maybe_set_lhs (dest_ptr_sval);
+
+  const region *sized_src_reg
+    = m_mgr->get_sized_region (src_reg, NULL_TREE, num_bytes_sval);
+  const region *sized_dest_reg
+    = m_mgr->get_sized_region (dest_reg, NULL_TREE, num_bytes_sval);
+  const svalue *src_contents_sval
+    = get_store_value (sized_src_reg, cd.get_ctxt ());
+  set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
+}
+
+/* Handle the on_call_pre part of "mempcpy" and "__builtin_mempcpy".  */
+
+void
+region_model::impl_call_mempcpy (const call_details &cd)
+{
+  const svalue *dest_ptr_sval = cd.get_arg_svalue (0);
+  const svalue *src_ptr_sval = cd.get_arg_svalue (1);
+  const svalue *num_bytes_sval = cd.get_arg_svalue (2);
+
+  const region *dest_reg = deref_rvalue (dest_ptr_sval, cd.get_arg_tree (0),
+					 cd.get_ctxt ());
+  const region *src_reg = deref_rvalue (src_ptr_sval, cd.get_arg_tree (1),
+					cd.get_ctxt ());
+
+  check_region_overlap (src_reg, 1, dest_reg, 0, num_bytes_sval, cd);
+
+  // TODO: Is this right?!?
+  const region *after_dest_reg
+    = m_mgr->get_offset_region (dest_reg, NULL_TREE, num_bytes_sval);
+  region_model_manager *rmm_mgr = m_mgr->get_store_manager ()->get_svalue_manager ();
+  const svalue *ptr_after_dst = rmm_mgr->get_ptr_svalue (NULL, after_dest_reg);
+
+  cd.maybe_set_lhs (ptr_after_dst);
 
   const region *sized_src_reg
     = m_mgr->get_sized_region (src_reg, NULL_TREE, num_bytes_sval);

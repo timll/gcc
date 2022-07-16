@@ -459,6 +459,7 @@ Objective-C and Objective-C++ Dialects}.
 -Wno-analyzer-null-dereference @gol
 -Wno-analyzer-possible-null-argument @gol
 -Wno-analyzer-possible-null-dereference @gol
+-Wno-analyzer-restrict @gol
 -Wno-analyzer-shift-count-negative @gol
 -Wno-analyzer-shift-count-overflow @gol
 -Wno-analyzer-stale-setjmp-buffer @gol
@@ -9974,6 +9975,21 @@ This warning requires @option{-fanalyzer}, which enables it; use
 
 This diagnostic warns for paths through the code in which a
 value known to be NULL is dereferenced.
+
+@item -Wno-analyzer-restrict
+@opindex Wanalyzer-restrict
+@opindex Wno-analyzer-restrict
+This warning requires @option{-fanalyzer}, which enables it; use
+@option{-Wno-analyzer-restrict} to disable it.
+
+This diagnostic warns for paths through the code in which an argument
+passed to a restrict-qualified parameter aliases with another argument.
+Further, it does warn on overlapping buffers passed to @code{memcpy} and
+@code{mempcpy}.
+
+This diagnostic is the equivalent of @option{-Wrestrict} inside the
+analyzer. The region model of the analyzer allows it to catch more bugs
+than @option{-Wrestrict}.
 
 @item -Wno-analyzer-shift-count-negative
 @opindex Wanalyzer-shift-count-negative

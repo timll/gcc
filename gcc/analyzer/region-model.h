@@ -629,6 +629,7 @@ class region_model
   void impl_call_free (const call_details &cd);
   void impl_call_malloc (const call_details &cd);
   void impl_call_memcpy (const call_details &cd);
+  void impl_call_mempcpy (const call_details &cd);
   void impl_call_memset (const call_details &cd);
   void impl_call_realloc (const call_details &cd);
   void impl_call_strchr (const call_details &cd);
