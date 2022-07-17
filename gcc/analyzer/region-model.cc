@@ -1321,7 +1321,7 @@ class region_overlap
 {
 public:
   region_overlap (tree src_tree, tree dst_tree, tree num,
-                  tree overlapping_bytes, tree fndecl)
+		  tree overlapping_bytes, tree fndecl)
   : restrict_alias (src_tree, dst_tree), m_num (num),
     m_overlapping_bytes (overlapping_bytes), m_fndecl (fndecl)
   {}
@@ -1365,8 +1365,8 @@ public:
   {
     if (m_num && m_src_tree && m_dst_tree && m_overlapping_bytes)
       return ev.formatted_print ("Copying %E bytes from %qE to %qE overlaps"
-                                 " %E bytes", m_num, m_src_tree, m_dst_tree,
-                                 m_overlapping_bytes);
+				 " %E bytes", m_num, m_src_tree, m_dst_tree,
+				 m_overlapping_bytes);
     return ev.formatted_print ("source and destination buffer overlap");
   }
 
@@ -1390,7 +1390,6 @@ maybe_get_parent_and_offset(const region *reg, const region **out_parent,
     case RK_DECL:
     case RK_ALLOCA:
     case RK_HEAP_ALLOCATED:
-    case RK_FIELD:
       *out_parent = reg;
       *out_offset = build_zero_cst (size_type_node);
       return true;
@@ -1432,41 +1431,26 @@ maybe_get_parent_and_offset(const region *reg, const region **out_parent,
 	  }
       }
       return false;
-    case RK_CAST:
-      {
-	const cast_region *cast_reg = as_a <const cast_region *> (reg);
-	return maybe_get_parent_and_offset (cast_reg->get_original_region (),
-					    out_parent, out_offset);
-      }
     default:
       return false;
     }
 }
 
-/* Return a region that is of a known value, else NULL.  */
+/* Return true if REG represents a known location in memory.  */
 
-static const region *
-maybe_get_known_region (const region *reg)
+static bool
+known_region_location_p (const region *reg)
 {
   switch (reg->get_kind ())
   {
-  case RK_CAST:
-    {
-	    const cast_region *cast_reg = as_a <const cast_region *> (reg);
-	    return cast_reg->get_original_region ();
-    }
   case RK_DECL:
   case RK_ALLOCA:
   case RK_HEAP_ALLOCATED:
-  case RK_FIELD:
   case RK_OFFSET:
   case RK_ELEMENT:
-  case RK_SIZED:
-  case RK_STRING:
-  case RK_BIT_RANGE:
-    return reg;
+    return true;
   default:
-    return NULL;
+    return false;
   }
 }
 
@@ -1506,8 +1490,9 @@ void region_model::check_region_overlap (const region *src,
 	  && maybe_get_parent_and_offset (dst, &dst_parent_reg, &dst_offset)
 	  && src_parent_reg == dst_parent_reg)
 	{
-	  /* If src < dst, we check that src + n < dst.
-	     Otherwise, we check that dst + n < src.  */
+	  /* If src < dst, src + n < dst must hold in case of reverse
+	     copying.  Otherwise, we check that dst + n < src holds in
+	     case of forward copying.  */
 	  tree src_lt_dst = fold_binary (LT_EXPR, boolean_type_node,
 					 src_offset, dst_offset);
 	  tree buf1;
@@ -1541,23 +1526,13 @@ void region_model::check_region_overlap (const region *src,
 	    }
 	}
     }
-  else
+    /* We do not have a constant 'n' or even no 'n'. In that case,
+       we do check that src and dst do not alias.  */
+  else if (known_region_location_p (src) && src == dst)
     {
-      /* We do not have a constant 'n' or even no 'n'. In that case, we do
-         assume 'n' is one.
-         Also, check that we do not compare unknown regions.  */
-      const region *known_src = maybe_get_known_region (src);
-      const region *known_dst = maybe_get_known_region (dst);
-      if (known_src && known_dst && known_src == known_dst)
-	{
-	  tree src_tree = cd.get_arg_tree (src_idx);
-	  tree dst_tree = cd.get_arg_tree (dst_idx);
-
-    src->dump (false);
-    dst->dump (false);
-
-	  ctxt->warn (new restrict_alias (src_tree, dst_tree));
-	}
+      tree src_tree = cd.get_arg_tree (src_idx);
+      tree dst_tree = cd.get_arg_tree (dst_idx);
+      ctxt->warn (new restrict_alias (src_tree, dst_tree));
     }
 }
 
