@@ -1697,7 +1697,8 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	  case BUILT_IN_MEMPCPY:
 	  case BUILT_IN_MEMPCPY_CHK:
 	    impl_call_mempcpy (cd);
-	    return false;
+      break;
+	    // return false;
 	  case BUILT_IN_MEMSET:
 	  case BUILT_IN_MEMSET_CHK:
 	    impl_call_memset (cd);
