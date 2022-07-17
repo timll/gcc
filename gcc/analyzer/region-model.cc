@@ -1443,14 +1443,31 @@ maybe_get_parent_and_offset(const region *reg, const region **out_parent,
     }
 }
 
-/* Return the original region if REG is a cast_region, else REG itself.  */
+/* Return a region that is of a known value, else NULL.  */
 
 static const region *
-remove_cast (const region *reg)
+maybe_get_known_region (const region *reg)
 {
-  if (const cast_region *cast_reg = dyn_cast <const cast_region *> (reg))
-    return cast_reg->get_original_region ();
-  return reg;
+  switch (reg->get_kind ())
+  {
+  case RK_CAST:
+    {
+	    const cast_region *cast_reg = as_a <const cast_region *> (reg);
+	    return cast_reg->get_original_region ();
+    }
+  case RK_DECL:
+  case RK_ALLOCA:
+  case RK_HEAP_ALLOCATED:
+  case RK_FIELD:
+  case RK_OFFSET:
+  case RK_ELEMENT:
+  case RK_SIZED:
+  case RK_STRING:
+  case RK_BIT_RANGE:
+    return reg;
+  default:
+    return NULL;
+  }
 }
 
 /* Checks whether SRC + NUM_SVAL overlaps DST and might emit a warning.
@@ -1505,6 +1522,10 @@ void region_model::check_region_overlap (const region *src,
 	      buf1 = dst_offset;
 	      buf2 = src_offset;
 	    }
+    else
+	    {
+	      return;
+	    }
 	  tree last_byte = fold_binary (PLUS_EXPR, size_type_node, buf1, num);
 	  /* If last_byte > buf2, src and dst overlap.  */
 	  if (fold_binary (GT_EXPR, boolean_type_node, last_byte, buf2)
@@ -1522,12 +1543,19 @@ void region_model::check_region_overlap (const region *src,
     }
   else
     {
-      /* We do not have a constant 'n' or even no 'n'.
-	 In that case, we do assume 'n' is one.  */
-      if (remove_cast (src) == remove_cast (dst))
+      /* We do not have a constant 'n' or even no 'n'. In that case, we do
+         assume 'n' is one.
+         Also, check that we do not compare unknown regions.  */
+      const region *known_src = maybe_get_known_region (src);
+      const region *known_dst = maybe_get_known_region (dst);
+      if (known_src && known_dst && known_src == known_dst)
 	{
 	  tree src_tree = cd.get_arg_tree (src_idx);
 	  tree dst_tree = cd.get_arg_tree (dst_idx);
+
+    src->dump (false);
+    dst->dump (false);
+
 	  ctxt->warn (new restrict_alias (src_tree, dst_tree));
 	}
     }
