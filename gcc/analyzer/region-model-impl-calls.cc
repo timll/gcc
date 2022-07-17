@@ -544,12 +544,8 @@ region_model::impl_call_mempcpy (const call_details &cd)
 
   check_region_overlap (src_reg, 1, dest_reg, 0, num_bytes_sval, cd);
 
-  // // TODO: Is this right?!?
-  // const region *after_dest_reg
-  //   = m_mgr->get_offset_region (dest_reg, NULL_TREE, num_bytes_sval);
-  // region_model_manager *rmm_mgr = m_mgr->get_store_manager ()->get_svalue_manager ();
-  // const svalue *ptr_after_dst = rmm_mgr->get_ptr_svalue (NULL, after_dest_reg);
-
+  // TODO: How to model this here? Create a region_svalue that points to
+  //       symbolic_region?
   // cd.maybe_set_lhs (ptr_after_dst);
 
   // const region *sized_src_reg

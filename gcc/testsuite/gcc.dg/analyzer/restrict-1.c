@@ -156,7 +156,6 @@ void test12 (void)
 void test13 (void)
 {
   memcpy_t fn = get_memcpy ();
-
   
   int32_t buf[4] = {0};
   void *view = buf;
@@ -169,7 +168,6 @@ void test13 (void)
 void test14 (void)
 {
   memcpy_t fn = get_memcpy ();
-
   
   int32_t buf[4] = {0};
   void *view = buf;
@@ -179,7 +177,6 @@ void test14 (void)
 void test15 (void)
 {
   memcpy_t fn = get_memcpy ();
-
   
   int32_t buf[4] = {0};
   void *view = buf;
@@ -187,4 +184,30 @@ void test15 (void)
 
   /* { dg-warning "" "warning" { target *-*-* } test15 } */
   /* { dg-message "" "note" { target *-*-* } test15 } */
+}
+
+
+/* field_region.  */
+
+struct my_struct {
+  int32_t i[4];
+};
+
+void test16 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  struct my_struct s;
+  memcpy (s.i + 2, s.i, 2 * sizeof (int32_t));
+}
+
+void test17 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  struct my_struct s;
+  memcpy (s.i + 1, s.i, 2 * sizeof (int32_t)); /* { dg-line test17 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test17 } */
+  /* { dg-message "" "note" { target *-*-* } test17 } */
 }
