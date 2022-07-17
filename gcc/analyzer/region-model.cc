@@ -1387,9 +1387,10 @@ maybe_get_parent_and_offset(const region *reg, const region **out_parent,
 {
   switch (reg->get_kind ())
     {
-    case RK_HEAP_ALLOCATED:
-    case RK_ALLOCA:
     case RK_DECL:
+    case RK_ALLOCA:
+    case RK_HEAP_ALLOCATED:
+    case RK_FIELD:
       *out_parent = reg;
       *out_offset = build_zero_cst (size_type_node);
       return true;
