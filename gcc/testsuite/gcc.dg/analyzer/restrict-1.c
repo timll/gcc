@@ -198,6 +198,8 @@ void test16 (void)
   memcpy_t fn = get_memcpy ();
 
   struct my_struct s;
+  for (int i = 0; i < 4; i++)
+    s.i[i] = i;
   memcpy (s.i + 2, s.i, 2 * sizeof (int32_t));
 }
 
@@ -206,6 +208,8 @@ void test17 (void)
   memcpy_t fn = get_memcpy ();
 
   struct my_struct s;
+  for (int i = 0; i < 4; i++)
+    s.i[i] = i;
   memcpy (s.i + 1, s.i, 2 * sizeof (int32_t)); /* { dg-line test17 } */
 
   /* { dg-warning "" "warning" { target *-*-* } test17 } */
