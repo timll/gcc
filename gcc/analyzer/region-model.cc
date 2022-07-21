@@ -1273,7 +1273,8 @@ class restrict_alias
 : public pending_diagnostic_subclass<restrict_alias>
 {
 public:
-  restrict_alias (tree src_tree, tree dst_tree)
+  restrict_alias (tree src_tree, tree dst_tree, tree fndecl)
+  : m_fndecl (fndecl)
   {
     m_src_tree = fixup_tree_for_diagnostic (src_tree);
     m_dst_tree = fixup_tree_for_diagnostic (dst_tree);
@@ -1298,9 +1299,14 @@ public:
   bool emit (rich_location *rich_loc) override
   {
     diagnostic_metadata m;
-    return warning_meta (rich_loc, m, get_controlling_option (),
+    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
 			 "argument passed to %<restrict%>-qualified parameter"
 			 " aliases with another argument");
+    
+    if (warned)
+      inform (DECL_SOURCE_LOCATION (m_fndecl), "declared here");
+
+    return warned;
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) override
@@ -1314,6 +1320,7 @@ public:
 protected:
   tree m_src_tree;
   tree m_dst_tree;
+  tree m_fndecl;
 };
 
 class region_overlap
@@ -1322,8 +1329,8 @@ class region_overlap
 public:
   region_overlap (tree src_tree, tree dst_tree, tree num,
 		  tree overlapping_bytes, tree fndecl)
-  : restrict_alias (src_tree, dst_tree), m_num (num),
-    m_overlapping_bytes (overlapping_bytes), m_fndecl (fndecl)
+  : restrict_alias (src_tree, dst_tree, fndecl), m_num (num),
+    m_overlapping_bytes (overlapping_bytes)
   {}
 
   bool operator== (const region_overlap &other) const
@@ -1340,6 +1347,7 @@ public:
     diagnostic_metadata m;
     if (m_fndecl)
       {
+        // rich_loc->add_fixit_replace ("memmove");
 	bool warned = warning_meta (rich_loc, m, get_controlling_option (),
 				    "Calling %qE with overlapping buffers"
 				    " results in undefined behavior",
@@ -1373,7 +1381,6 @@ public:
 private:
   tree m_num;
   tree m_overlapping_bytes;
-  tree m_fndecl;
 };
 
 /* Return true if REG points to some region on the stack or heap,
@@ -1476,6 +1483,20 @@ void region_model::check_region_overlap (const region *src,
   if (!ctxt)
     return;
 
+  src->dump (false);
+	dst->dump (false);
+  region_offset src_off = src->get_offset ();
+  region_offset dst_off = dst->get_offset ();
+  src_off.get_base_region ()->dump (false);
+  dst_off.get_base_region ()->dump (false);
+  if (!src_off.symbolic_p () && !dst_off.symbolic_p ())
+  {
+    src_off.get_bit_offset ().dump ();
+    dst_off.get_bit_offset ().dump ();
+    inform (UNKNOWN_LOCATION, "%i", src_off.get_bit_offset ());
+    inform (UNKNOWN_LOCATION, "%i", dst_off.get_bit_offset ());
+  }
+
   if (num_sval && is_a <const constant_svalue *> (num_sval))
     {
       const constant_svalue *cst_sval
@@ -1534,7 +1555,8 @@ void region_model::check_region_overlap (const region *src,
     {
       tree src_tree = cd.get_arg_tree (src_idx);
       tree dst_tree = cd.get_arg_tree (dst_idx);
-      ctxt->warn (new restrict_alias (src_tree, dst_tree));
+      ctxt->warn (new restrict_alias (src_tree, dst_tree,
+                                      cd.get_fndecl_for_call ()));
     }
 }
 
@@ -1861,8 +1883,8 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	    {
 	      const svalue *sval = cd.get_arg_svalue (paramno);
 	      const region *reg = deref_rvalue (sval,
-									      cd.get_arg_tree (paramno),
-												cd.get_ctxt ());
+						cd.get_arg_tree (paramno),
+						cd.get_ctxt ());
 	      
 	      auto pair = std::make_pair (paramno, reg);
 	      restrict_params.safe_push (pair);
@@ -1879,7 +1901,7 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	    const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
 	    const region *arg_reg = deref_rvalue (arg_sval,
 						  cd.get_arg_tree (arg_idx),
-										cd.get_ctxt ());
+						  cd.get_ctxt ());
 
 	    for (auto pair : restrict_params)
 	      {
