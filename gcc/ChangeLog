@@ -1,3 +1,291 @@
+2022-07-21  Sam Feifer  <sfeifer@redhat.com>
+
+	PR tree-optimization/94920
+	* match.pd (x >= 0 ? x : 0) + (x <= 0 ? -x : 0): New simplification.
+	           (x <= 0 ? -x : 0): New simplification.
+
+2022-07-21  Prathamesh Kulkarni  <prathamesh.kulkarni@linaro.org>
+
+	Revert:
+	2022-07-19  Prathamesh Kulkarni  <prathamesh.kulkarni@linaro.org>
+
+	* tree-ssa-forwprop.cc (simplify_permutation): Use lhs type
+	instead of TREE_TYPE (arg0) as result type in folding VEC_PERM_EXPR.
+
+2022-07-21  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/106379
+	* match.pd (~(a ^ b) -> a == b): New pattern.
+
+2022-07-21  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/106378
+	* tree-ssa-dse.cc (initialize_ao_ref_for_dse): Handle
+	LEN_STORE, add mode to initialize a may-def and handle
+	MASK_STORE that way.
+	(dse_optimize_stmt): Query may-defs.  Handle internal
+	functions LEN_STORE and MASK_STORE similar to how
+	we handle memory builtins but without byte tracking.
+
+2022-07-21  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/106365
+	* tree-ssa-sccvn.cc (pd_data::rhs_off): New field determining
+	the offset to start encoding of RHS from.
+	(vn_walk_cb_data::vn_walk_cb_data): Initialize it.
+	(vn_walk_cb_data::push_partial_def): Allow the first partial
+	definition to be fully providing the def.  Offset RHS
+	before encoding if requested.
+	(vn_reference_lookup_3): Initialize def_rhs everywhere.
+	Add support for .MASK_STORE and .LEN_STORE (partial) definitions.
+
+2022-07-21  Richard Biener  <rguenther@suse.de>
+
+	* tree-ssa-alias.cc (ref_maybe_used_by_call_p_1): Special-case
+	store internal functions and IFN_MASK_LOAD, IFN_LEN_LOAD
+	and IFN_MASK_LOAD_LANES.
+	(call_may_clobber_ref_p_1): Special-case IFN_MASK_STORE,
+	IFN_LEN_STORE and IFN_MASK_STORE_LANES.
+
+2022-07-20  Alexander Monakov  <amonakov@ispras.ru>
+
+	PR rtl-optimization/101347
+	* builtins.cc (expand_builtin) [BUILT_IN_SETJMP_SETUP]: Move
+	population of nonlocal_goto_handler_labels from here ...
+	(expand_builtin) [BUILT_IN_SETJMP_RECEIVER]: ... to here.
+	* rtlanal.cc (remove_node_from_insn_list): Verify that a
+	duplicate is not present in the remainder of the list.
+
+2022-07-20  Alexander Monakov  <amonakov@ispras.ru>
+
+	* rtl.h (remove_node_from_expr_list): Remove declaration.
+	* rtlanal.cc (remove_node_from_expr_list): Remove (no uses).
+
+2022-07-20  Richard Biener  <rguenther@suse.de>
+
+	* tree-vect-data-refs.cc (bump_vector_ptr): Return an
+	invariant updated address when the input was invariant.
+
+2022-07-20  liuhongt  <hongtao.liu@intel.com>
+
+	* passes.def: (Split pass_cse_sincos to pass_expand_powcabs
+	and pass_cse_sincos, and move pass_cse_sincos after vectorizer).
+	* timevar.def (TV_TREE_POWCABS): New timevar.
+	* tree-pass.h (make_pass_expand_powcabs): Split from pass_cse_sincos.
+	* tree-ssa-math-opts.cc (gimple_expand_builtin_cabs): Ditto.
+	(class pass_expand_powcabs): Ditto.
+	(pass_expand_powcabs::execute): Ditto.
+	(make_pass_expand_powcabs): Ditto.
+	(pass_cse_sincos::execute): Remove pow/cabs expand part.
+	(make_pass_cse_sincos): Ditto.
+
+2022-07-20  Richard Biener  <richard.guenther@gmail.com>
+	    Hongtao Liu  <hongtao.liu@intel.com>
+
+	PR tree-optimization/106010
+	* tree-complex.cc (init_dont_simulate_again): Lower complex
+	type move.
+	(expand_complex_move): Also expand COMPLEX_CST for rhs.
+
+2022-07-19  Andrew MacLeod  <amacleod@redhat.com>
+
+	* gimple-range-cache.cc (ranger_cache::range_from_dom): Check
+	  for incoming ranges on join nodes and add to worklist.
+
+2022-07-19  Andrew MacLeod  <amacleod@redhat.com>
+
+	* gimple-range-cache.cc (ranger_cache::resolve_dom): New.
+	(ranger_cache::range_from_dom): Put all nodes to be calculated
+	in the worklist and resolve after the dom walk.
+	* gimple-range-cache.h (resolve_dom): New prototype.
+
+2022-07-19  Alexander Monakov  <amonakov@ispras.ru>
+
+	* tree-cfg.cc (gimple_verify_flow_info): Check placement of
+	returns_twice calls.
+
+2022-07-19  Alexander Monakov  <amonakov@ispras.ru>
+
+	* cfghooks.cc (duplicate_block): Expand comment.
+	* tree-cfg.cc (gimple_can_duplicate_bb_p): Reject blocks with
+	calls that may return twice.
+
+2022-07-19  Alexander Monakov  <amonakov@ispras.ru>
+
+	* tree-ssa-sink.cc (select_best_block): Punt if selected block
+	has incoming abnormal edges.
+
+2022-07-19  Martin Liska  <mliska@suse.cz>
+
+	* doc/extend.texi: Remove trailing :.
+
+2022-07-19  Prathamesh Kulkarni  <prathamesh.kulkarni@linaro.org>
+
+	* tree-ssa-forwprop.cc (simplify_permutation): Use lhs type
+	instead of TREE_TYPE (arg0) as result type in folding VEC_PERM_EXPR.
+
+2022-07-19  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/106331
+	* builtins.cc (get_memory_rtx): Compute alignment from
+	the original address and set MEM_OFFSET to unknown when
+	we create a MEM_EXPR from the base object of the address.
+
+2022-07-19  Richard Biener  <rguenther@suse.de>
+
+	PR lto/106334
+	* dwarf2out.cc (dwarf2out_register_external_die): Allow
+	map entry re-use during WPA.
+
+2022-07-19  Roger Sayle  <roger@nextmovesoftware.com>
+	    Richard Biener  <rguenther@suse.de>
+
+	PR c/106264
+	* builtins.cc (fold_builtin_frexp): Call suppress_warning on
+	COMPOUND_EXPR to silence spurious warning if result isn't used.
+	(fold_builtin_modf): Likewise.
+	(do_mpfr_remquo): Likewise.
+
+2022-07-19  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.cc (xtensa_rtx_costs):
+	Change the relative cost of '(set (reg) (const_int N))' where
+	N fits into signed 12-bit from 4 to 0 if optimizing for size.
+	And use the appropriate macro instead of the bare number 4.
+
+2022-07-18  Andrew MacLeod  <amacleod@redhat.com>
+
+	PR tree-optimization/106280
+	* value-relation.cc (dom_oracle::register_relation): Register
+	transitives only when it is possible for there to be one.
+	(dom_oracle::set_one_relation): Return NULL if this is an
+	existing relation.
+
+2022-07-18  Maciej W. Rozycki  <macro@embecosm.com>
+
+	* doc/invoke.texi (RISC-V Options): Add index references for
+	`mrelax' and `mriscv-attribute'.
+
+2022-07-18  Maciej W. Rozycki  <macro@embecosm.com>
+
+	* doc/invoke.texi (Option Summary): Add missing second space
+	around `-mstack-protector-guard-reg='.
+
+2022-07-18  Maciej W. Rozycki  <macro@embecosm.com>
+
+	* doc/invoke.texi (Option Summary): Fix `-mno-riscv-attribute'.
+	(RISC-V Options): Likewise, and `-mriscv-attribute'.
+
+2022-07-18  Claudiu Zissulescu  <claziss@gmail.com>
+
+	* config/arc/arc-arch.h (arc_tune_attr): Add
+	ARC_TUNE_ARCHS4X_REL31A variant.
+	* config/arc/arc.cc (arc_override_options): Tune options for
+	release 310a.
+	(arc_sched_issue_rate): Use correct enum.
+	(arc600_corereg_hazard): Textual change.
+	(arc_hazard): Add release 310a tunning.
+	* config/arc/arc.md (tune): Update and take into consideration new
+	tune option.
+	(tune_dspmpy): Likewise.
+	(tune_store): New attribute.
+	* config/arc/arc.opt (mtune): New tune option.
+	* config/arc/arcHS4x.md (hs4x_brcc0, hs4x_brcc1): New cpu units.
+	(hs4x_brcc_op): New instruction rezervation.
+	(hs4x_data_store_1_op): Likewise.
+	* config/arc/arc-cpus.def (hs4x_rel31): New cpu variant.
+	* config/arc/arc-tables.opt: Regenerate.
+	* config/arc/t-multilib: Likewise.
+	* doc/invoke.texi (ARC): Update mcpu and tune sections.
+
+2022-07-18  Richard Biener  <rguenther@suse.de>
+
+	* tree-loop-distribution.cc (loop_distribution::distribute_loop):
+	When computing cost-based merging do not disregard builtin
+	classified partitions in some cases.
+
+2022-07-18  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR target/106253
+	* config/arm/arm-builtins.cc (arm_builtin_vectorized_function):
+	Delete.
+	* config/arm/arm-protos.h (arm_builtin_vectorized_function): Delete.
+	* config/arm/arm.cc (TARGET_VECTORIZE_BUILTIN_VECTORIZED_FUNCTION):
+	Delete.
+	* config/arm/arm_neon_builtins.def (copysignf): Delete.
+	* config/arm/iterators.md (nvrint_pattern): New attribute.
+	* config/arm/neon.md (<NEON_VRINT:nvrint_pattern><VCVTF:mode>2):
+	New pattern.
+	(l<NEON_VCVT:nvrint_pattern><su_optab><VCVTF:mode><v_cmp_result>2):
+	Likewise.
+	(neon_copysignf<mode>): Rename to...
+	(copysign<mode>3): ...this.
+
+2022-07-18  Claudiu Zissulescu  <claziss@gmail.com>
+
+	* config/arc/arc.cc (arc_expand_epilogue): Adjust the frame
+	pointer first when in interrupts.
+
+2022-07-18  Richard Biener  <rguenther@suse.de>
+
+	* tree-loop-distribution.cc (copy_loop_before): Add
+	the ability to replace the original LC PHI defs.
+	(generate_loops_for_partition): Pass through a flag
+	whether to redirect original LC PHI defs.
+	(generate_code_for_partition): Likewise.
+	(loop_distribution::distribute_loop): Compute the partition
+	that should provide the LC PHI defs for common reductions
+	and pass that down.
+
+2022-07-18  Richard Ball  <richard.ball@arm.com>
+
+	* config/aarch64/aarch64.cc (aarch64_evpc_trn): Use std:swap.
+	(aarch64_evpc_uzp): Likewise.
+	(aarch64_evpc_zip): Likewise.
+
+2022-07-18  Roger Sayle  <roger@nextmovesoftware.com>
+
+	PR target/106231
+	* config/i386/i386.md (*ctzsidi2_<s>ext): New insn_and_split
+	to recognize any_extend:DI of ctz:SI which is implicitly extended.
+	(*ctzsidi2_<s>ext_falsedep): New define_insn to model a DImode
+	extended ctz:SI that has preceding xor to break false dependency.
+
+2022-07-18  Roger Sayle  <roger@nextmovesoftware.com>
+
+	* config/i386/predicates.md (x86_64_const_vector_operand):
+	Check the operand's mode matches the specified mode argument.
+
+2022-07-18  Roger Sayle  <roger@nextmovesoftware.com>
+
+	* config/i386/sse.md (kunpckhi): Add UNSPEC_MASKOP unspec.
+	(kunpcksi): Likewise, add UNSPEC_MASKOP unspec.
+	(kunpckdi): Likewise, add UNSPEC_MASKOP unspec.
+	(vec_pack_trunc_qi): Update to specify the now required
+	UNSPEC_MASKOP unspec.
+	(vec_pack_trunc_<mode>): Likewise.
+
+2022-07-16  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.md
+	(*masktrue_const_pow2_minus_one, *masktrue_const_negative_pow2,
+	*masktrue_const_shifted_mask): If the immediate for bitwise AND is
+	represented as '-(1 << N)', decrease the lower bound of N from 12
+	to 1.  And the other immediate for conditional branch is now no
+	longer limited to zero, but also one of some positive integers.
+	Finally, remove the checks of some conditions, because the comparison
+	expressions that don't satisfy such checks are determined as
+	compile-time constants and thus will be optimized away before
+	RTL expansion.
+
+2022-07-16  Takayuki 'January June' Suwa  <jjsuwa_sys3175@yahoo.co.jp>
+
+	* config/xtensa/xtensa.cc (xtensa_emit_constantsynth): Remove.
+	(xtensa_constantsynth_2insn): Change to try all three synthetic
+	methods and to use the one that fits the immediate value of
+	the seed into a Narrow Move Immediate instruction "MOVI.N"
+	when the Code Density Option is configured.
+
 2022-07-15  H.J. Lu  <hjl.tools@gmail.com>
 
 	PR target/85620
