@@ -1328,7 +1328,7 @@ class region_overlap
 {
 public:
   region_overlap (tree src_tree, tree dst_tree, tree num,
-		  tree overlapping_bytes, tree fndecl)
+                  unsigned HOST_WIDE_INT overlapping_bytes, tree fndecl)
   : restrict_alias (src_tree, dst_tree, fndecl), m_num (num),
     m_overlapping_bytes (overlapping_bytes)
   {}
@@ -1337,8 +1337,7 @@ public:
   {
     return restrict_alias::operator==(other)
 	   && pending_diagnostic::same_tree_p (m_num, other.m_num)
-	   && pending_diagnostic::same_tree_p (m_overlapping_bytes,
-					       other.m_overlapping_bytes)
+	   && m_overlapping_bytes == other.m_overlapping_bytes
 	   && pending_diagnostic::same_tree_p (m_fndecl, other.m_fndecl);
   }
 
@@ -1349,131 +1348,66 @@ public:
       {
         // rich_loc->add_fixit_replace ("memmove");
 	bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-				    "Calling %qE with overlapping buffers"
+				    "calling %qE with overlapping buffers"
 				    " results in undefined behavior",
 				    m_fndecl);
 	if (warned)
 	  inform (rich_loc->get_loc (),
-		  "Use %<memmove%> instead of %qE with overlapping buffers",
+		  "use %<memmove%> instead of %qE with overlapping buffers",
 		  m_fndecl);
 	return warned;
       }
 
     bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-				"Calling with overlapping buffers"
+				"calling with overlapping buffers"
 				" results in undefined behavior");
     if (warned)
       inform (rich_loc->get_loc (),
-	      "Use %<memmove%> instead with overlapping buffers");
+	      "use %<memmove%> instead with overlapping buffers");
     return warned;
   }
 
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    if (m_num && m_src_tree && m_dst_tree && m_overlapping_bytes)
-      return ev.formatted_print ("Copying %E bytes from %qE to %qE overlaps"
-				 " %E bytes", m_num, m_src_tree, m_dst_tree,
-				 m_overlapping_bytes);
+    if (m_num && m_src_tree && m_dst_tree)
+      return ev.formatted_print ("Copying %E bytes from %qE to %qE overlaps in"
+                                 " " HOST_WIDE_INT_PRINT_UNSIGNED " bytes",
+                                 m_num, m_src_tree, m_dst_tree, 
+                                 m_overlapping_bytes);
     return ev.formatted_print ("source and destination buffer overlap");
   }
 
 private:
   tree m_num;
-  tree m_overlapping_bytes;
+  unsigned HOST_WIDE_INT m_overlapping_bytes;
 };
 
-/* Return true if REG points to some region on the stack or heap,
-   possibly with a constant index/offset.
-   If true, OUT_PARENT is set to the region without any offset and
-   OUT_OFFSET is set to the constant index/offset in bytes.  */
-
-static bool
-maybe_get_parent_and_offset(const region *reg, const region **out_parent,
-			    tree *out_offset)
+static const region *
+remove_cast (const region *reg)
 {
-  switch (reg->get_kind ())
-    {
-    case RK_DECL:
-    case RK_ALLOCA:
-    case RK_HEAP_ALLOCATED:
-    case RK_FIELD:
-      *out_parent = reg;
-      *out_offset = build_zero_cst (size_type_node);
-      return true;
-    case RK_OFFSET:
-      {
-	const offset_region *offset_reg = as_a <const offset_region *> (reg);
-	*out_parent = offset_reg->get_parent_region ();
-	const svalue *offset = offset_reg->get_byte_offset ();
-	if (const constant_svalue *cst_offset
-	      = dyn_cast <const constant_svalue *> (offset))
-	  {
-	    *out_offset = cst_offset->get_constant ();
-	    return true;
-	  }
-      }
-      return false;
-    case RK_ELEMENT:
-      {
-	const element_region *element_reg
-	  = as_a <const element_region *> (reg);
-	*out_parent = element_reg->get_parent_region ();
-	const svalue *index = element_reg->get_index ();
-	if (const constant_svalue *cst_index
-	      = dyn_cast <const constant_svalue *> (index))
-	  {
-	    tree type = element_reg->get_type ();
-	    if (type == NULL_TREE || TYPE_SIZE_UNIT (type) == NULL_TREE)
-	      return false;
-
-	    tree size = size_in_bytes (type);
-	    tree index_cst = cst_index->get_constant ();
-	    tree result = fold_binary (MULT_EXPR, size_type_node,
-				      index_cst, size);
-	    if (result)
-	      {
-		*out_offset = result;
-		return true;
-	      }
-	  }
-      }
-      return false;
-    default:
-      return false;
-    }
+  if (const cast_region *cast_reg = dyn_cast <const cast_region *> (reg))
+    return cast_reg->get_original_region ();
+  return reg;
 }
 
-/* Return true if REG represents a known location in memory.  */
-
 static bool
-known_region_location_p (const region *reg)
+symbolic_p (const region *reg)
 {
-  switch (reg->get_kind ())
-  {
-  case RK_DECL:
-  case RK_ALLOCA:
-  case RK_HEAP_ALLOCATED:
-  case RK_FIELD:
-  case RK_OFFSET:
-  case RK_ELEMENT:
-    return true;
-  default:
-    return false;
-  }
+  return reg->get_kind () == RK_SYMBOLIC;
 }
 
 /* Checks whether SRC + NUM_SVAL overlaps DST and might emit a warning.
 
-   If NUM_SVAL is NULL or non-constant, it checks wether SRC and DST
+   If NUM_BYTES_SVAL is NULL or non-constant, it checks wether SRC and DST
    point to the same location.  */
 
 void region_model::check_region_overlap (const region *src,
-					 unsigned src_idx,
-					 const region *dst,
-					 unsigned dst_idx,
-					 const svalue *num_sval,
-					 const call_details &cd) const
+                                         unsigned src_idx,
+                                         const region *dst,
+                                         unsigned dst_idx,
+                                         const svalue *num_bytes_sval,
+                                         const call_details &cd) const
 {
   /* Do not warn again if Wrestrict already warned at this statement.  */
   if (warning_suppressed_p (cd.get_call_stmt (), OPT_Wrestrict))
@@ -1483,80 +1417,70 @@ void region_model::check_region_overlap (const region *src,
   if (!ctxt)
     return;
 
-  src->dump (false);
-	dst->dump (false);
-  region_offset src_off = src->get_offset ();
-  region_offset dst_off = dst->get_offset ();
-  src_off.get_base_region ()->dump (false);
-  dst_off.get_base_region ()->dump (false);
-  if (!src_off.symbolic_p () && !dst_off.symbolic_p ())
-  {
-    src_off.get_bit_offset ().dump ();
-    dst_off.get_bit_offset ().dump ();
-    inform (UNKNOWN_LOCATION, "%i", src_off.get_bit_offset ());
-    inform (UNKNOWN_LOCATION, "%i", dst_off.get_bit_offset ());
-  }
-
-  if (num_sval && is_a <const constant_svalue *> (num_sval))
+  if (num_bytes_sval && is_a <const constant_svalue*> (num_bytes_sval))
     {
-      const constant_svalue *cst_sval
-	= as_a <const constant_svalue *> (num_sval);
-      tree num = cst_sval->get_constant ();
-      if (TREE_CODE (num) != INTEGER_CST)
-	return;
+      tree num_bytes = num_bytes_sval->maybe_get_constant ();
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (num_bytes)))
+          return;
+      bit_size_t num_bits = TREE_INT_CST_LOW (num_bytes) << 3;
 
-      const region *src_parent_reg;
-      tree src_offset;
-      const region *dst_parent_reg;
-      tree dst_offset;
-      if (maybe_get_parent_and_offset (src, &src_parent_reg, &src_offset)
-	  && maybe_get_parent_and_offset (dst, &dst_parent_reg, &dst_offset)
-	  && src_parent_reg == dst_parent_reg)
-	{
-	  /* If src < dst, src + n < dst must hold in case of reverse
-	     copying.  Otherwise, we check that dst + n < src holds in
-	     case of forward copying.  */
-	  tree src_lt_dst = fold_binary (LT_EXPR, boolean_type_node,
-					 src_offset, dst_offset);
-	  tree buf1;
-	  tree buf2;
-	  if (src_lt_dst == boolean_true_node)
-	    {
-	      buf1 = src_offset;
-	      buf2 = dst_offset;
-	    }
-	  else if (src_lt_dst == boolean_false_node)
-	    {
-	      buf1 = dst_offset;
-	      buf2 = src_offset;
-	    }
-    else
-	    {
-	      return;
-	    }
-	  tree last_byte = fold_binary (PLUS_EXPR, size_type_node, buf1, num);
-	  /* If last_byte > buf2, src and dst overlap.  */
-	  if (fold_binary (GT_EXPR, boolean_type_node, last_byte, buf2)
-		== boolean_true_node)
-	    {
-	      tree src_tree = cd.get_arg_tree (src_idx);
-	      tree dst_tree = cd.get_arg_tree (dst_idx);
-	      tree overlapping_bytes = fold_binary (MINUS_EXPR, size_type_node,
-						    last_byte, buf2);
-	      ctxt->warn (new region_overlap (src_tree, dst_tree, num,
-					      overlapping_bytes,
-					      cd.get_fndecl_for_call ()));
-	    }
-	}
+      region_offset src_offset = src->get_offset ();
+      region_offset dst_offset = dst->get_offset ();
+      const region *src_base_reg = src_offset.get_base_region ();
+      const region *dst_base_reg = dst_offset.get_base_region ();
+      if (!src_offset.symbolic_p () && !dst_offset.symbolic_p()
+          && src_base_reg == dst_base_reg)
+        {
+          bit_size_t src_bit_offset = src_offset.get_bit_offset ();
+          bit_size_t dst_bit_offset = dst_offset.get_bit_offset ();
+          tree src_tree = cd.get_arg_tree (src_idx);
+          tree dst_tree = cd.get_arg_tree (dst_idx);
+
+          bool src_ge_dst = src_bit_offset <= dst_bit_offset
+                            && src_bit_offset + num_bits > dst_bit_offset;
+          bool dst_gt_src = src_bit_offset > dst_bit_offset
+                            && dst_bit_offset + num_bits > src_bit_offset;
+          if (src_ge_dst)
+            {
+              offset_int overlapping_bytes = ((src_bit_offset + num_bits)
+                                                - dst_bit_offset) >> 3;
+              ctxt->warn (new region_overlap (src_tree, dst_tree, num_bytes,
+                                              overlapping_bytes.to_uhwi (),
+                                              cd.get_fndecl_for_call ()));
+            }
+          else if (dst_gt_src)
+            {              
+              offset_int overlapping_bytes = ((dst_bit_offset + num_bits)
+                                                - src_bit_offset) >> 3;
+              ctxt->warn (new region_overlap (src_tree, dst_tree, num_bytes,
+                                              overlapping_bytes.to_uhwi (),
+                                              cd.get_fndecl_for_call ()));
+            }
+        }
     }
-    /* We do not have a constant 'n' or even no 'n'. In that case,
-       we do check that src and dst do not alias.  */
-  else if (known_region_location_p (src) && src == dst)
+  else if (num_bytes_sval && is_a <const widening_svalue*> (num_bytes_sval))
     {
-      tree src_tree = cd.get_arg_tree (src_idx);
-      tree dst_tree = cd.get_arg_tree (dst_idx);
-      ctxt->warn (new restrict_alias (src_tree, dst_tree,
-                                      cd.get_fndecl_for_call ()));
+      const widening_svalue *w_sval
+        = as_a <const widening_svalue *> (num_bytes_sval);
+      region_model::check_region_overlap (src, src_idx, dst, dst_idx,
+                                          w_sval->get_base_svalue (), cd);
+      region_model::check_region_overlap (src, src_idx, dst, dst_idx,
+                                          w_sval->get_iter_svalue (), cd);
+      return;
+    }
+  /* We do not have a constant 'n' or even no 'n'. In that case,
+      we do check that src and dst do not alias.  */
+  else
+    {
+      const region * src_region = remove_cast (src);
+      const region * dst_region = remove_cast (dst);
+      if (!symbolic_p (src_region) && src_region == dst_region)
+        {
+          tree src_tree = cd.get_arg_tree (src_idx);
+          tree dst_tree = cd.get_arg_tree (dst_idx);
+          ctxt->warn (new restrict_alias (src_tree, dst_tree,
+                                          cd.get_fndecl_for_call ()));
+        }
     }
 }
 
