@@ -1391,22 +1391,33 @@ remove_cast (const region *reg)
   return reg;
 }
 
+static const svalue *
+remove_cast (const svalue *sval)
+{
+  if (const unaryop_svalue *unop_sval = dyn_cast <const unaryop_svalue *> (sval))
+    {
+      if (CONVERT_EXPR_CODE_P (unop_sval->get_op ()))
+        return unop_sval->get_arg ();
+    }
+  return sval;
+}
+
 static bool
 symbolic_p (const region *reg)
 {
   return reg->get_kind () == RK_SYMBOLIC;
 }
 
-/* Checks whether SRC + NUM_SVAL overlaps DST and might emit a warning.
+/* Check whether SRC and DST point to the same memory location
+   and might emit a warning.
 
-   If NUM_BYTES_SVAL is NULL or non-constant, it checks wether SRC and DST
-   point to the same location.  */
+   src_idx and dst_idx are 0-based indices to retrieve the
+   argument from CD.  */
 
-void region_model::check_region_overlap (const region *src,
+void region_model::check_region_aliases (const region *src,
                                          unsigned src_idx,
                                          const region *dst,
                                          unsigned dst_idx,
-                                         const svalue *num_bytes_sval,
                                          const call_details &cd) const
 {
   /* Do not warn again if Wrestrict already warned at this statement.  */
@@ -1417,9 +1428,44 @@ void region_model::check_region_overlap (const region *src,
   if (!ctxt)
     return;
 
-  if (num_bytes_sval && is_a <const constant_svalue*> (num_bytes_sval))
+  const region * src_region = remove_cast (src);
+  const region * dst_region = remove_cast (dst);
+  if (!symbolic_p (src_region) && src_region == dst_region)
     {
-      tree num_bytes = num_bytes_sval->maybe_get_constant ();
+      tree src_tree = cd.get_arg_tree (src_idx);
+      tree dst_tree = cd.get_arg_tree (dst_idx);
+      ctxt->warn (new restrict_alias (src_tree, dst_tree,
+                                      cd.get_fndecl_for_call ()));
+    }
+}
+
+/* Checks whether SRC and DST overlap and might emit a warning.
+
+   src_idx and dst_idx are 0-based indices to retrieve the argument from CD.
+   NUM_BYTES_SVAL is the number of bytes that are copied starting from SRC,
+   i.e. the third argument of memcpy.  If NUM_BYTES_SVAL is non-constant, it
+   falls back to check whether SRC and DST point to the same location.  */
+
+void region_model::check_region_overlap (const region *src,
+                                         unsigned src_idx,
+                                         const region *dst,
+                                         unsigned dst_idx,
+                                         const svalue *num_bytes_sval,
+                                         const call_details &cd) const
+{
+  gcc_assert (num_bytes_sval);
+
+  /* Do not warn again if Wrestrict already warned at this statement.  */
+  if (warning_suppressed_p (cd.get_call_stmt (), OPT_Wrestrict))
+    return;
+
+  region_model_context *ctxt = cd.get_ctxt ();
+  if (!ctxt)
+    return;
+    
+  num_bytes_sval = remove_cast (num_bytes_sval);
+  if (tree num_bytes = num_bytes_sval->maybe_get_constant ())
+    {
       if (!INTEGRAL_TYPE_P (TREE_TYPE (num_bytes)))
           return;
       bit_size_t num_bits = TREE_INT_CST_LOW (num_bytes) << 3;
@@ -1449,7 +1495,7 @@ void region_model::check_region_overlap (const region *src,
                                               cd.get_fndecl_for_call ()));
             }
           else if (dst_gt_src)
-            {              
+            {
               offset_int overlapping_bytes = ((dst_bit_offset + num_bits)
                                                 - src_bit_offset) >> 3;
               ctxt->warn (new region_overlap (src_tree, dst_tree, num_bytes,
@@ -1458,29 +1504,17 @@ void region_model::check_region_overlap (const region *src,
             }
         }
     }
-  else if (num_bytes_sval && is_a <const widening_svalue*> (num_bytes_sval))
+  else if (const widening_svalue *w_sval
+              = dyn_cast <const widening_svalue *> (num_bytes_sval))
     {
-      const widening_svalue *w_sval
-        = as_a <const widening_svalue *> (num_bytes_sval);
       region_model::check_region_overlap (src, src_idx, dst, dst_idx,
                                           w_sval->get_base_svalue (), cd);
       region_model::check_region_overlap (src, src_idx, dst, dst_idx,
                                           w_sval->get_iter_svalue (), cd);
-      return;
     }
-  /* We do not have a constant 'n' or even no 'n'. In that case,
-      we do check that src and dst do not alias.  */
   else
     {
-      const region * src_region = remove_cast (src);
-      const region * dst_region = remove_cast (dst);
-      if (!symbolic_p (src_region) && src_region == dst_region)
-        {
-          tree src_tree = cd.get_arg_tree (src_idx);
-          tree dst_tree = cd.get_arg_tree (dst_idx);
-          ctxt->warn (new restrict_alias (src_tree, dst_tree,
-                                          cd.get_fndecl_for_call ()));
-        }
+      check_region_aliases (src, src_idx, dst, dst_idx, cd);
     }
 }
 
@@ -1832,8 +1866,8 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 		unsigned restricted_idx = std::get<0> (pair);
 		const region *restricted_reg = std::get<1> (pair);
 		if (restricted_idx != arg_idx)
-		  check_region_overlap (restricted_reg, restricted_idx,
-					arg_reg, arg_idx, NULL, cd);
+		  check_region_aliases (restricted_reg, restricted_idx,
+					arg_reg, arg_idx, cd);
 	      }
 	}
     }

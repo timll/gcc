@@ -128,7 +128,7 @@ Warn about code paths in which a NULL pointer is dereferenced.
 
 Wanalyzer-restrict
 Common Var(warn_analyzer_allocation_size) Init(1) Warning
-Warn about code paths in which an argument is passed to a restrict-qualified parameter aliases with another argument.
+Warn about code paths in which an argument passed to a restrict-qualified parameter aliases with another argument.
 
 Wanalyzer-shift-count-negative
 Common Var(warn_analyzer_shift_count_negative) Init(1) Warning

@@ -215,3 +215,45 @@ void test17 (void)
   /* { dg-warning "" "warning" { target *-*-* } test17 } */
   /* { dg-message "" "note" { target *-*-* } test17 } */
 }
+
+void test18 (int cond)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int32_t buf[4];
+  int32_t n;
+  if (cond)
+    n = 2 * sizeof (int32_t);
+  else
+    n = 3 * sizeof (int32_t);
+  fn (buf + 2, buf, n); /* { dg-line test18 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test18 } */
+  /* { dg-message "" "note" { target *-*-* } test18 } */
+}
+
+void test19 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int16_t buf[2];
+  int32_t *view = (int32_t *) buf;
+  fn (view, buf, sizeof (int32_t)); /* { dg-line test19 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test19 } */
+  /* { dg-message "" "note" { target *-*-* } test19 } */
+}
+
+void test20 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int16_t buf[4];
+  int32_t *view = (int32_t *) buf;
+  fn (&view[1], buf, sizeof (int32_t));
+}
+
+union my_union
+{
+  /* data */
+};

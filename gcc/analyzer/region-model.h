@@ -870,6 +870,9 @@ class region_model
   void check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 			  region_model_context *ctxt) const;
 
+  void check_region_aliases (const region *src, unsigned src_idx,
+                             const region *dst, unsigned dst_idx,
+                             const call_details &cd) const;
   void check_region_overlap (const region *src, unsigned src_idx,
                              const region *dst, unsigned dst_idx,
                              const svalue *num_sval,
