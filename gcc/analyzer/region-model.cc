@@ -74,7 +74,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
-#include "print-tree.h"
 
 #if ENABLE_ANALYZER
 
@@ -1377,7 +1376,7 @@ public:
   final override
   {
     if (m_num && m_src_tree && m_dst_tree)
-      return ev.formatted_print ("Copying %E bytes from %qE to %qE overlaps in"
+      return ev.formatted_print ("copying %E bytes from %qE to %qE overlaps in"
 				 " %E bytes",
 				 m_num, m_src_tree, m_dst_tree, 
 				 m_overlapping_bytes);

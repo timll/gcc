@@ -30,8 +30,8 @@ void test2 (void)
   int32_t buf[4] = {0};
   fn (&buf[1], buf, 2 * sizeof(int32_t)); /* { dg-line test2 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test2 } */
-  /* { dg-message "" "note" { target *-*-* } test2 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test2 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test2 } */
 }
 
 /* element_region & element_region.  */
@@ -51,8 +51,8 @@ void test4 (void)
   int32_t buf[4] = {0};
   fn (&buf[1], &buf[0], 2 * sizeof(int32_t)); /* { dg-line test4 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test4 } */
-  /* { dg-message "" "note" { target *-*-* } test4 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test4 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test4 } */
 }
 
 /* offset_region & decl_region.  */
@@ -72,8 +72,8 @@ void test6 (void)
   int32_t buf[4] = {0};
   fn (buf + 1, buf, 2 * sizeof(int32_t)); /* { dg-line test6 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test6 } */
-  /* { dg-message "" "note" { target *-*-* } test6 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test6 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test6 } */
 }
 
 /* offset_region & offset_region.  */
@@ -93,8 +93,8 @@ void test8 (void)
   int32_t buf[4] = {0};
   fn (buf + 3, buf + 2, 2 * sizeof(int32_t)); /* { dg-line test8 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test8 } */
-  /* { dg-message "" "note" { target *-*-* } test8 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test8 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test8 } */
 }
 
 /* element_region & heap_allocated_region.  */
@@ -120,8 +120,8 @@ void test10 (void)
   fn (&buf[1], buf, 2 * sizeof(int32_t)); /* { dg-line test10 } */
   free (buf);
 
-  /* { dg-warning "" "warning" { target *-*-* } test10 } */
-  /* { dg-message "" "note" { target *-*-* } test10 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test10 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test10 } */
 }
 
 /* offset_region & heap_allocated_region.  */
@@ -147,8 +147,8 @@ void test12 (void)
   fn (buf + 1, buf, 2 * sizeof(int32_t)); /* { dg-line test12 } */
   free (buf);
 
-  /* { dg-warning "" "warning" { target *-*-* } test12 } */
-  /* { dg-message "" "note" { target *-*-* } test12 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test12 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test12 } */
 }
 
 /* aliased region.  */
@@ -161,8 +161,8 @@ void test13 (void)
   void *view = buf;
   fn (view, buf, 2 * sizeof(int32_t)); /* { dg-line test13 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test13 } */
-  /* { dg-message "" "note" { target *-*-* } test13 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test13 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test13 } */
 }
 
 void test14 (void)
@@ -182,8 +182,8 @@ void test15 (void)
   void *view = buf;
   fn (view + sizeof(int32_t), buf, 2 * sizeof(int32_t)); /* { dg-line test15 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test15 } */
-  /* { dg-message "" "note" { target *-*-* } test15 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test15 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test15 } */
 }
 
 void test16 (void)
@@ -194,8 +194,8 @@ void test16 (void)
   int32_t *view = (int32_t *) buf;
   fn (view, buf, sizeof (int32_t)); /* { dg-line test16 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test16 } */
-  /* { dg-message "" "note" { target *-*-* } test16 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test16 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test16 } */
 }
 
 void test17 (void)
@@ -232,8 +232,8 @@ void test19 (void)
     s.i[i] = i;
   fn (s.i + 1, s.i, 2 * sizeof (int32_t)); /* { dg-line test19 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test19 } */
-  /* { dg-message "" "note" { target *-*-* } test19 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test19 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test19 } */
 }
 
 void test20 (int cond)
@@ -248,8 +248,8 @@ void test20 (int cond)
     n = 3 * sizeof (int32_t);
   fn (buf + 2, buf, n); /* { dg-line test20 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test20 } */
-  /* { dg-message "" "note" { target *-*-* } test20 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test20 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test20 } */
 }
 
 struct nested_struct {
@@ -278,10 +278,10 @@ void test21 (void)
   fn (ns.ptr[0].i, ns.ptr[0].i + 2, 2 * sizeof (int32_t));
   fn (ns.ptr[0].i, ns.ptr[0].i + 2, 3 * sizeof (int32_t)); /* { dg-line test21b } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test21a } */
-  /* { dg-message "" "note" { target *-*-* } test21a } */
-  /* { dg-warning "" "warning" { target *-*-* } test21b } */
-  /* { dg-message "" "note" { target *-*-* } test21b } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test21a } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test21a } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test21b } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test21b } */
 }
 
 /* 35 bits aka more than 4 bytes.  */
@@ -303,6 +303,68 @@ void test22 (void)
   fn (ptr, ptr + 2, 2);
   fn (ptr + 2, ptr, 3); /* { dg-line test22 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test22 } */
-  /* { dg-message "" "note" { target *-*-* } test22 } */
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test22 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test22 } */
+}
+
+/* Union.  */
+
+union my_union {
+  int16_t s;
+  int32_t m;
+};
+
+void test23 (void)
+{
+  memcpy_t fn = get_memcpy ();
+  
+  union my_union u;
+  void *ptr = (void *) &u;
+  fn (ptr + 2, &u, 2);
+}
+
+void test24 (void)
+{
+  memcpy_t fn = get_memcpy ();
+  
+  union my_union u;
+  void *ptr = (void *) &u;
+  fn (ptr + 1, &u, 2); /* { dg-line test24 } */
+
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test24 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test24 } */
+}
+
+/* Test fallback.  */
+
+void test25 (int n)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int32_t buf[4];
+  fn (buf, buf, 2 * n); /* { dg-line test25 } */
+
+  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test25 } */
+  /* { dg-message "point to the same memory location" "note" { target *-*-* } test25 } */
+}
+
+void test26 (int n)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int32_t buf[4];
+  void *alias = buf;
+  fn (alias, buf, 2 * n); /* { dg-line test26 } */
+
+  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test26 } */
+  /* { dg-message "point to the same memory location" "note" { target *-*-* } test26 } */
+}
+
+void test27 (int n)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int buf[4];
+  int *alias = buf;
+  fn (alias + 1, buf, 2 * n);
 }
