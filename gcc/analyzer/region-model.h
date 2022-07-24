@@ -733,7 +733,6 @@ class region_model
 					  region_model_context *ctxt);
 
   tree get_representative_tree (const svalue *sval) const;
-  tree get_representative_tree (const region *reg) const;
   path_var
   get_representative_path_var (const svalue *sval,
 			       svalue_set *visited) const;

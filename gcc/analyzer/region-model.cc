@@ -4102,19 +4102,6 @@ region_model::get_representative_tree (const svalue *sval) const
   return fixup_tree_for_diagnostic (expr);
 }
 
-tree
-region_model::get_representative_tree (const region *reg) const
-{
-  svalue_set visited;
-  tree expr = get_representative_path_var (reg, &visited).m_tree;
-
-  /* Strip off any top-level cast.  */
-  if (expr && TREE_CODE (expr) == NOP_EXPR)
-    expr = TREE_OPERAND (expr, 0);
-
-  return fixup_tree_for_diagnostic (expr);
-}
-
 /* Implementation of region_model::get_representative_path_var.
 
    Attempt to return a path_var that represents REG, or return
