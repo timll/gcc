@@ -1681,7 +1681,6 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	  case BUILT_IN_MEMPCPY_CHK:
 	    impl_call_mempcpy (cd);
       break;
-	    // return false;
 	  case BUILT_IN_MEMSET:
 	  case BUILT_IN_MEMSET_CHK:
 	    impl_call_memset (cd);
@@ -1831,7 +1830,7 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
       unsigned paramno = 0;
       /* Search for restrict-qualified parameters.  */
       for (tree iter = TYPE_ARG_TYPES (fntype); iter;
-   iter = TREE_CHAIN (iter), ++paramno)
+	     iter = TREE_CHAIN (iter), ++paramno)
 	{
 	  tree type = TREE_VALUE (iter);
 	  if (POINTER_TYPE_P (type) && TYPE_RESTRICT (type)
@@ -1849,25 +1848,25 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
       /* Check for aliases of arguments passed
 	 to restrict-qualified parameters. */
       if (restrict_params.length () > 0)
-	for (unsigned arg_idx = 0; arg_idx < cd.num_args (); arg_idx++)
-	  {
-	    if (!POINTER_TYPE_P (cd.get_arg_type (arg_idx)))
-	      continue;
+        for (unsigned arg_idx = 0; arg_idx < cd.num_args (); arg_idx++)
+          {
+            if (!POINTER_TYPE_P (cd.get_arg_type (arg_idx)))
+              continue;
 
-	    const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
-	    const region *arg_reg = deref_rvalue (arg_sval,
+            const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
+            const region *arg_reg = deref_rvalue (arg_sval,
 						  cd.get_arg_tree (arg_idx),
 						  cd.get_ctxt ());
 
-	    for (auto pair : restrict_params)
-	      {
-		unsigned restricted_idx = std::get<0> (pair);
-		const region *restricted_reg = std::get<1> (pair);
-		if (restricted_idx != arg_idx)
-		  check_region_aliases (restricted_reg, restricted_idx,
+            for (auto pair : restrict_params)
+              {
+                unsigned restricted_idx = std::get<0> (pair);
+                const region *restricted_reg = std::get<1> (pair);
+                if (restricted_idx != arg_idx)
+                  check_region_aliases (restricted_reg, restricted_idx,
 					arg_reg, arg_idx, cd);
-	      }
-	}
+              }
+        }
     }
   else
     unknown_side_effects = true;

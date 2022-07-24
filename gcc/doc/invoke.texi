@@ -9987,9 +9987,11 @@ passed to a restrict-qualified parameter aliases with another argument.
 Further, it does warn on overlapping buffers passed to @code{memcpy} and
 @code{mempcpy}.
 
-This diagnostic is the equivalent of @option{-Wrestrict} inside the
-analyzer. The region model of the analyzer allows it to catch more bugs
-than @option{-Wrestrict}.
+This diagnostic similar to @option{-Wrestrict} but inside the analyzer.
+The region model of the analyzer allows it to catch more bugs than
+@option{-Wrestrict} in presence of aliases. Note that this diagnostic,
+unlike @option{-Wrestrict}, does not warn on overlapping buffers for
+functions such as @code{strcpy}, @code{strncpy}, etc.
 
 @item -Wno-analyzer-shift-count-negative
 @opindex Wanalyzer-shift-count-negative
