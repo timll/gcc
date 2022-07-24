@@ -145,6 +145,7 @@ public:
   const frame_region *maybe_get_frame_region () const;
   enum memory_space get_memory_space () const;
   bool can_have_initial_svalue_p () const;
+  const region *unwrap_cast () const;  
 
   tree maybe_get_decl () const;
 
@@ -200,6 +201,8 @@ public:
 			      auto_vec <const region *> *out) const;
 
   bool symbolic_for_unknown_ptr_p () const;
+
+  bool symbolic_p () const;
 
   /* For most base regions it makes sense to track the bindings of the region
      within the store.  As an optimization, some are not tracked (to avoid

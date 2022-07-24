@@ -186,6 +186,26 @@ void test15 (void)
   /* { dg-message "" "note" { target *-*-* } test15 } */
 }
 
+void test16 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int16_t buf[2];
+  int32_t *view = (int32_t *) buf;
+  fn (view, buf, sizeof (int32_t)); /* { dg-line test16 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test16 } */
+  /* { dg-message "" "note" { target *-*-* } test16 } */
+}
+
+void test17 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int16_t buf[4];
+  int32_t *view = (int32_t *) buf;
+  fn (&view[1], buf, sizeof (int32_t));
+}
 
 /* field_region.  */
 
@@ -193,7 +213,7 @@ struct my_struct {
   int32_t i[4];
 };
 
-void test16 (void)
+void test18 (void)
 {
   memcpy_t fn = get_memcpy ();
 
@@ -203,20 +223,20 @@ void test16 (void)
   fn (s.i + 2, s.i, 2 * sizeof (int32_t));
 }
 
-void test17 (void)
+void test19 (void)
 {
   memcpy_t fn = get_memcpy ();
 
   struct my_struct s;
   for (int i = 0; i < 4; i++)
     s.i[i] = i;
-  fn (s.i + 1, s.i, 2 * sizeof (int32_t)); /* { dg-line test17 } */
+  fn (s.i + 1, s.i, 2 * sizeof (int32_t)); /* { dg-line test19 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test17 } */
-  /* { dg-message "" "note" { target *-*-* } test17 } */
+  /* { dg-warning "" "warning" { target *-*-* } test19 } */
+  /* { dg-message "" "note" { target *-*-* } test19 } */
 }
 
-void test18 (int cond)
+void test20 (int cond)
 {
   memcpy_t fn = get_memcpy ();
 
@@ -226,34 +246,63 @@ void test18 (int cond)
     n = 2 * sizeof (int32_t);
   else
     n = 3 * sizeof (int32_t);
-  fn (buf + 2, buf, n); /* { dg-line test18 } */
+  fn (buf + 2, buf, n); /* { dg-line test20 } */
 
-  /* { dg-warning "" "warning" { target *-*-* } test18 } */
-  /* { dg-message "" "note" { target *-*-* } test18 } */
+  /* { dg-warning "" "warning" { target *-*-* } test20 } */
+  /* { dg-message "" "note" { target *-*-* } test20 } */
 }
 
-void test19 (void)
-{
-  memcpy_t fn = get_memcpy ();
-
-  int16_t buf[2];
-  int32_t *view = (int32_t *) buf;
-  fn (view, buf, sizeof (int32_t)); /* { dg-line test19 } */
-
-  /* { dg-warning "" "warning" { target *-*-* } test19 } */
-  /* { dg-message "" "note" { target *-*-* } test19 } */
-}
-
-void test20 (void)
-{
-  memcpy_t fn = get_memcpy ();
-
-  int16_t buf[4];
-  int32_t *view = (int32_t *) buf;
-  fn (&view[1], buf, sizeof (int32_t));
-}
-
-union my_union
-{
-  /* data */
+struct nested_struct {
+  struct my_struct *ptr;
 };
+
+void test21 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  struct my_struct first;
+  memset (first.i, 0, sizeof (first.i));
+  struct my_struct second;
+  memset (second.i, 0, sizeof (second.i));
+
+  struct my_struct arr[2];
+  arr[0] = first;
+  arr[1] = second;
+  struct nested_struct ns;
+  ns.ptr = arr;
+
+  fn (&ns.ptr[0], &ns.ptr[1], 3 * sizeof (int32_t));
+  fn (ns.ptr, ((char *) ns.ptr) + 2 * sizeof (int32_t), 2 * sizeof (int32_t));
+  fn (ns.ptr, ((char *) ns.ptr) + 2 * sizeof (int32_t), 3 * sizeof (int32_t)); /* { dg-line test21a } */
+  fn (ns.ptr[0].i, ns.ptr[1].i, 3 * sizeof (int32_t));
+  fn (ns.ptr[0].i, ns.ptr[0].i + 2, 2 * sizeof (int32_t));
+  fn (ns.ptr[0].i, ns.ptr[0].i + 2, 3 * sizeof (int32_t)); /* { dg-line test21b } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test21a } */
+  /* { dg-message "" "note" { target *-*-* } test21a } */
+  /* { dg-warning "" "warning" { target *-*-* } test21b } */
+  /* { dg-message "" "note" { target *-*-* } test21b } */
+}
+
+/* 35 bits aka more than 4 bytes.  */
+struct bit_struct {
+  unsigned int a : 7;
+  unsigned int b : 7;
+  unsigned int c : 7;
+  unsigned int d : 7;
+  unsigned int e : 7;
+};
+
+void test22 (void)
+{
+  memcpy_t fn = get_memcpy ();
+  struct bit_struct bs;
+  memset (&bs, 0, sizeof (bs));
+
+  char *ptr = (char *) &bs;
+  fn (ptr, ptr + 2, 2);
+  fn (ptr + 2, ptr, 3); /* { dg-line test22 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test22 } */
+  /* { dg-message "" "note" { target *-*-* } test22 } */
+}

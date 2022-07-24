@@ -141,6 +141,17 @@ svalue::maybe_undo_cast () const
   return NULL;
 }
 
+/* If this svalue is a cast (i.e a unaryop NOP_EXPR or VIEW_CONVERT_EXPR),
+   return the underlying svalue.
+   Otherwise return this svalue.  */
+
+const svalue *
+svalue::unwrap_cast () const
+{
+  const svalue *sval = unwrap_any_unmergeable ()->maybe_undo_cast ();
+  return sval ? sval : this;
+}
+
 /* If this svalue is an unmergeable decorator around another svalue, return
    the underlying svalue.
    Otherwise return this svalue.  */

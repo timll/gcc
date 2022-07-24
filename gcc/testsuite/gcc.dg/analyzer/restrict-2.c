@@ -1,4 +1,6 @@
 /* { dg-additional-options -Wno-restrict } */
+#include <stdint.h>
+#include <string.h>
 
 /* Wanalyzer-restrict tests for arbitrary functions with restrict-qualifed
    parameters.  Wrestrict is disabled because the checker only warns if
@@ -44,4 +46,44 @@ void test4 (void)
 {
   int buf[1] = {0};
   fun2 (buf, *buf);
+}
+
+void test5 (void)
+{
+  int16_t buf[2];
+  int32_t *view = (int32_t *) buf;
+  fun (buf, view); /* { dg-line test5 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test5 } */
+  /* { dg-message "" "note" { target *-*-* } test5 } */
+}
+
+struct my_struct {
+  void *a;
+  void *b;
+};
+
+void test6 (void) {
+  int a[4];
+  memset (a, 0, sizeof (a));
+  int b[4];
+  memset (b, 0, sizeof (b));
+
+  struct my_struct s;
+  s.a = a;
+  s.b = b;
+  fun (s.a, s.b);
+}
+
+void test7 (void) {
+  int a[4];
+  memset (a, 0, sizeof (a));
+
+  struct my_struct s;
+  s.a = a;
+  s.b = a;
+  fun (s.a, s.b); /* { dg-line test7 } */
+
+  /* { dg-warning "" "warning" { target *-*-* } test7 } */
+  /* { dg-message "" "note" { target *-*-* } test7 } */
 }

@@ -138,6 +138,7 @@ public:
   tree maybe_get_constant () const;
   const region *maybe_get_region () const;
   const svalue *maybe_undo_cast () const;
+  const svalue *unwrap_cast () const;
   const svalue *unwrap_any_unmergeable () const;
 
   const svalue *can_merge_p (const svalue *other,

@@ -275,6 +275,17 @@ region::can_have_initial_svalue_p () const
     }
 }
 
+/* If this region is a cast_region, return the original region.
+   Otherwise, return REG.  */ 
+
+const region *
+region::unwrap_cast () const
+{
+  if (const cast_region *cast_reg = dyn_cast_cast_region ())
+    return cast_reg->get_original_region ();
+  return this;
+}
+
 /* If this region is a decl_region, return the decl.
    Otherwise return NULL.  */
 
@@ -627,6 +638,14 @@ region::symbolic_for_unknown_ptr_p () const
     if (sym_reg->get_pointer ()->get_kind () == SK_UNKNOWN)
       return true;
   return false;
+}
+
+/* Return true if this is a symbolic region.  */
+
+bool
+region::symbolic_p () const
+{
+  return get_kind () == RK_SYMBOLIC;
 }
 
 /* Return true if this is a region for a decl with name DECL_NAME.
