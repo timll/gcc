@@ -1271,8 +1271,7 @@ region_model::on_stmt_pre (const gimple *stmt,
 /* Concrete subclass of pending_diagnostic_subclass complaining about arguments
    passed to restrict-qualified parameters aliasing with another argument.  */
 
-class restrict_alias
-: public pending_diagnostic_subclass<restrict_alias>
+class restrict_alias : public pending_diagnostic_subclass<restrict_alias>
 {
 public:
   restrict_alias (tree src_tree, tree dst_tree, tree fndecl)
@@ -1328,8 +1327,7 @@ protected:
 /* Concrete subclass of restrict_alias to warn on the special case where a
    number of bytes are copied and the buffers shall not overlap.  */
 
-class region_overlap
-: public restrict_alias
+class region_overlap : public restrict_alias
 {
 public:
   region_overlap (tree src_tree, tree dst_tree, tree num,
