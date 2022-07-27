@@ -1274,8 +1274,9 @@ region_model::on_stmt_pre (const gimple *stmt,
 class restrict_alias : public pending_diagnostic_subclass<restrict_alias>
 {
 public:
-  restrict_alias (tree src_tree, tree dst_tree, tree fndecl)
-  : m_fndecl (fndecl)
+  restrict_alias (tree src_tree, unsigned src_idx,
+		  tree dst_tree, unsigned dst_idx, tree fndecl)
+  : m_src_idx (src_idx), m_dst_idx (dst_idx), m_fndecl (fndecl)
   {
     m_src_tree = fixup_tree_for_diagnostic (src_tree);
     m_dst_tree = fixup_tree_for_diagnostic (dst_tree);
@@ -1301,8 +1302,9 @@ public:
   {
     diagnostic_metadata m;
     bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-			 "argument passed to %<restrict%>-qualified parameter"
-			 " aliases with another argument");
+				"argument %u passed to %<restrict%>-qualified"
+				" parameter aliases with argument %u",
+				m_src_idx + 1, m_dst_idx + 1);
     
     if (warned)
       inform (DECL_SOURCE_LOCATION (m_fndecl), "declared here");
@@ -1315,12 +1317,15 @@ public:
     if (m_src_tree && m_dst_tree)
       return ev.formatted_print ("%qE and %qE point to the same memory"
 				 " location", m_src_tree, m_dst_tree);
-    return ev.formatted_print ("arguments point to the same location");
+    return ev.formatted_print ("argument %u and %u point to the same location",
+			       m_src_idx + 1, m_dst_idx + 1);
   }
 
 protected:
   tree m_src_tree;
+  unsigned m_src_idx;
   tree m_dst_tree;
+  unsigned m_dst_idx;
   tree m_fndecl;
 };
 
@@ -1330,9 +1335,10 @@ protected:
 class region_overlap : public restrict_alias
 {
 public:
-  region_overlap (tree src_tree, tree dst_tree, tree num,
-		  tree overlapping_bytes, tree fndecl)
-  : restrict_alias (src_tree, dst_tree, fndecl), m_num (num),
+  region_overlap (tree src_tree, unsigned src_idx, tree dst_tree,
+		  unsigned dst_idx, tree num, tree overlapping_bytes,
+		  tree fndecl)
+  : restrict_alias (src_tree, src_idx, dst_tree, dst_idx, fndecl), m_num (num),
     m_overlapping_bytes (overlapping_bytes)
   {}
 
@@ -1374,11 +1380,14 @@ public:
   final override
   {
     if (m_num && m_src_tree && m_dst_tree)
-      return ev.formatted_print ("copying %E bytes from %qE to %qE overlaps in"
+      return ev.formatted_print ("copying %E bytes from %qE to %qE overlaps by"
 				 " %E bytes",
 				 m_num, m_src_tree, m_dst_tree, 
 				 m_overlapping_bytes);
-    return ev.formatted_print ("source and destination buffer overlap");
+    return ev.formatted_print ("copying %E bytes from argument %u to argument"
+			       " %u overlaps by %E bytes",
+			       m_num, m_src_idx + 1, m_dst_idx + 1, 
+			       m_overlapping_bytes);
   }
 
 private:
@@ -1389,8 +1398,10 @@ private:
 /* Check whether SRC and DST point to the same memory location
    and might emit a warning.
 
-   src_idx and dst_idx are 0-based indices to retrieve the
-   argument from CD.  */
+   If only one parameter is restrict-qualified, SRC must point to the
+   region of the argument passed to the restrict-qualified parameter.
+   SRC_IDX and DST_IDX are 0-based indices to retrieve the argument
+   from CD.  */
 
 void region_model::check_region_aliases (const region *src,
 					 unsigned src_idx,
@@ -1414,7 +1425,7 @@ void region_model::check_region_aliases (const region *src,
     {
       tree src_tree = cd.get_arg_tree (src_idx);
       tree dst_tree = cd.get_arg_tree (dst_idx);
-      ctxt->warn (new restrict_alias (src_tree, dst_tree,
+      ctxt->warn (new restrict_alias (src_tree, src_idx, dst_tree, dst_idx,
 				      cd.get_fndecl_for_call ()));
     }
 }
@@ -1444,12 +1455,12 @@ void region_model::check_region_overlap (const region *src,
     return;
 
   num_bytes_sval = num_bytes_sval->unwrap_cast ();
-  if (tree num_bytes = num_bytes_sval->maybe_get_constant ())
+  if (tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
     {
       /* Bail out if the constant is no integer.  */
-      if (!INTEGRAL_TYPE_P (TREE_TYPE (num_bytes)))
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (num_bytes_tree)))
 	  return;
-      bit_size_t num_bits = TREE_INT_CST_LOW (num_bytes) << 3;
+      byte_size_t num_bytes = TREE_INT_CST_LOW (num_bytes_tree);
 
       region_offset src_offset = src->get_offset ();
       region_offset dst_offset = dst->get_offset ();
@@ -1461,41 +1472,33 @@ void region_model::check_region_overlap (const region *src,
       if (src_base_reg == dst_base_reg && !src_base_reg->symbolic_p ()
 	  && !src_offset.symbolic_p () && !dst_offset.symbolic_p ())
 	{
-	  bit_size_t src_bit_offset = src_offset.get_bit_offset ();
-	  bit_size_t dst_bit_offset = dst_offset.get_bit_offset ();
-	  tree src_tree = cd.get_arg_tree (src_idx);
-	  tree dst_tree = cd.get_arg_tree (dst_idx);
+	  /* It is prohibited to get the pointer address of bit fields, thus
+	     we can assume that the offset here is always a multiple of 8.  */
+	  byte_size_t src_byte_offset
+	    = src_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+	  byte_size_t dst_byte_offset
+	    = dst_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
 
-	  /* END_BIT is the bit index after the copied range.  */
-	  bit_size_t end_bit;
-	  /* MAX_BIT is the bit index where the other buffer begins.  */ 
-	  bit_size_t max_bit;
 	  /* If the SRC pointer < DST pointer, we need to check that
 	    SRC + NUM_BYTES_SVAL is still before the beginning of DST.
 	    Overlapping buffers would yield unexpected behavior if the
 	    implementation copies in the forward direction.
 
 	    Otherwise, vice versa.  */
-	  if (src_bit_offset <= dst_bit_offset)
-	    {
-	      end_bit = src_bit_offset + num_bits;
-	      max_bit = dst_bit_offset;
-	    }
-	  else
-	    {
-	      end_bit = dst_bit_offset + num_bits;
-	      max_bit = src_bit_offset;
-	    }
-
+	  byte_range src_range (src_byte_offset, num_bytes);
+	  byte_range dst_range (dst_byte_offset, num_bytes);
+	  byte_size_t num_overlap_bytes;
 	  /* Emit a warning if the buffers overlap.  */
-	  if (end_bit > max_bit)
-	    {
-	      /* Convert the overlapping range to bytes for the diagnostic.  */
-	      tree overlapping_bytes_tree
-		= wide_int_to_tree (size_type_node, (end_bit - max_bit) >> 3);
-	      ctxt->warn (new region_overlap (src_tree, dst_tree,
-					      num_bytes,
-					      overlapping_bytes_tree,
+	  if (src_range.intersects_p (dst_range, &num_overlap_bytes))
+	    {	  
+	      tree src_tree = cd.get_arg_tree (src_idx);
+	      tree dst_tree = cd.get_arg_tree (dst_idx);
+	      tree num_overlap_bytes_tree
+		= wide_int_to_tree (size_type_node, num_overlap_bytes);
+	      ctxt->warn (new region_overlap (src_tree, src_idx,
+					      dst_tree, dst_idx,
+					      num_bytes_tree,
+					      num_overlap_bytes_tree,
 					      cd.get_fndecl_for_call ()));
 	    }
 	}
@@ -1848,25 +1851,25 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
       /* Check for aliases of arguments passed
 	 to restrict-qualified parameters. */
       if (restrict_params.length () > 0)
-        for (unsigned arg_idx = 0; arg_idx < cd.num_args (); arg_idx++)
-          {
-            if (!POINTER_TYPE_P (cd.get_arg_type (arg_idx)))
-              continue;
+	for (unsigned arg_idx = 0; arg_idx < cd.num_args (); arg_idx++)
+	  {
+	    if (!POINTER_TYPE_P (cd.get_arg_type (arg_idx)))
+	      continue;
 
-            const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
-            const region *arg_reg = deref_rvalue (arg_sval,
+	    const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
+	    const region *arg_reg = deref_rvalue (arg_sval,
 						  cd.get_arg_tree (arg_idx),
 						  cd.get_ctxt ());
 
-            for (auto pair : restrict_params)
-              {
-                unsigned restricted_idx = std::get<0> (pair);
-                const region *restricted_reg = std::get<1> (pair);
-                if (restricted_idx != arg_idx)
-                  check_region_aliases (restricted_reg, restricted_idx,
+	    for (auto pair : restrict_params)
+	      {
+		unsigned restricted_idx = std::get<0> (pair);
+		const region *restricted_reg = std::get<1> (pair);
+		if (restricted_idx != arg_idx)
+		  check_region_aliases (restricted_reg, restricted_idx,
 					arg_reg, arg_idx, cd);
-              }
-        }
+	      }
+	}
     }
   else
     unknown_side_effects = true;

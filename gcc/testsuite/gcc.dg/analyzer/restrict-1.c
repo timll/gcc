@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -6,11 +7,19 @@
 
 /* Avoid folding of memcpy.  */
 typedef void * (*memcpy_t) (void *dst, const void *src, size_t n);
-  
+
+typedef void * (*mempcpy_t) (void *dst, const void *src, size_t n);
+
 static memcpy_t __attribute__((noinline))
 get_memcpy (void)
 {
   return memcpy;
+}
+
+static mempcpy_t __attribute__((noinline))
+get_mempcpy (void)
+{
+  return mempcpy;
 }
 
 /* element_region & decl_region.  */
@@ -31,7 +40,7 @@ void test2 (void)
   fn (&buf[1], buf, 2 * sizeof(int32_t)); /* { dg-line test2 } */
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test2 } */
-  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test2 } */
+  /* { dg-message "copying 8 bytes" "note" { target *-*-* } test2 } */
 }
 
 /* element_region & element_region.  */
@@ -59,7 +68,7 @@ void test4 (void)
 
 void test5 (void)
 {
-  memcpy_t fn = get_memcpy ();
+  memcpy_t fn = get_mempcpy ();
 
   int32_t buf[4] = {0};
   fn (buf + 2, buf, 2 * sizeof(int32_t));
@@ -88,12 +97,12 @@ void test7 (void)
 
 void test8 (void)
 {
-  memcpy_t fn = get_memcpy ();
+  memcpy_t fn = get_mempcpy ();
 
   int32_t buf[4] = {0};
   fn (buf + 3, buf + 2, 2 * sizeof(int32_t)); /* { dg-line test8 } */
 
-  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test8 } */
+  /* { dg-warning "calling 'mempcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test8 } */
   /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test8 } */
 }
 
@@ -128,7 +137,7 @@ void test10 (void)
 
 void test11 (void)
 {
-  memcpy_t fn = get_memcpy ();
+  memcpy_t fn = get_mempcpy ();
 
   int32_t *buf = malloc (4 * sizeof (int32_t));
   if (!buf)
@@ -188,13 +197,13 @@ void test15 (void)
 
 void test16 (void)
 {
-  memcpy_t fn = get_memcpy ();
+  memcpy_t fn = get_mempcpy ();
 
   int16_t buf[2];
   int32_t *view = (int32_t *) buf;
   fn (view, buf, sizeof (int32_t)); /* { dg-line test16 } */
 
-  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test16 } */
+  /* { dg-warning "calling 'mempcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test16 } */
   /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test16 } */
 }
 
@@ -344,7 +353,7 @@ void test25 (int n)
   int32_t buf[4];
   fn (buf, buf, 2 * n); /* { dg-line test25 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test25 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test25 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test25 } */
 }
 
@@ -356,7 +365,7 @@ void test26 (int n)
   void *alias = buf;
   fn (alias, buf, 2 * n); /* { dg-line test26 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test26 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test26 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test26 } */
 }
 
@@ -367,4 +376,23 @@ void test27 (int n)
   int buf[4];
   int *alias = buf;
   fn (alias + 1, buf, 2 * n);
+}
+
+/* Interprocedural.  */
+
+void __attribute__((noinline)) memcpy_wrapper (void *dst, void *src, size_t count)
+{
+  memcpy_t fn = get_memcpy ();
+
+  fn (dst, src, count); /* { dg-line test28 } */
+
+  /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test28 } */
+  /* { dg-message "copying \\d+ bytes" "note" { target *-*-* } test28 } */
+}
+
+
+void test28 (void)
+{
+  int32_t buf[4];
+  memcpy_wrapper (buf + 2, buf, 3 * sizeof (int32_t));
 }

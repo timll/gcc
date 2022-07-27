@@ -21,7 +21,7 @@ void test1 (void)
   int buf[4];
   fun (buf, buf); /* { dg-line test1 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test1 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test1 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test1 } */
 }
 
@@ -31,7 +31,7 @@ void test2 (void)
   int *alias = buf;
   fun (alias, buf); /* { dg-line test2 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test2 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test2 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test2 } */
 }
 
@@ -54,7 +54,7 @@ void test5 (void)
   int32_t *view = (int32_t *) buf;
   fun (buf, view); /* { dg-line test5 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test5 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test5 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test5 } */
 }
 
@@ -63,7 +63,8 @@ struct my_struct {
   void *b;
 };
 
-void test6 (void) {
+void test6 (void)
+{
   int a[4];
   memset (a, 0, sizeof (a));
   int b[4];
@@ -75,7 +76,8 @@ void test6 (void) {
   fun (s.a, s.b);
 }
 
-void test7 (void) {
+void test7 (void)
+{
   int a[4];
   memset (a, 0, sizeof (a));
 
@@ -84,6 +86,20 @@ void test7 (void) {
   s.b = a;
   fun (s.a, s.b); /* { dg-line test7 } */
 
-  /* { dg-warning "argument passed to 'restrict'-qualified parameter aliases with another argument" "warning" { target *-*-* } test7 } */
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test7 } */
   /* { dg-message "point to the same memory location" "note" { target *-*-* } test7 } */
+}
+
+void __attribute__((noinline)) fun_wrapper (void *a, void *b)
+{
+  fun (a, b); /* { dg-line test8 } */
+
+  /* { dg-warning "argument 1 passed to 'restrict'-qualified parameter aliases with argument 2" "warning" { target *-*-* } test8 } */
+  /* { dg-message "point to the same memory location" "note" { target *-*-* } test8 } */
+}
+
+void test8 (void)
+{
+  int buf[4];
+  fun_wrapper (buf, buf);
 }

@@ -310,6 +310,9 @@ struct byte_range
 	    && m_size_in_bytes == other.m_size_in_bytes);
   }
 
+  bool intersects_p (const byte_range &other,
+                     byte_size_t *out_num_overlap_bytes) const;
+
   byte_offset_t get_start_byte_offset () const
   {
     return m_start_byte_offset;

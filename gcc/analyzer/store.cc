@@ -424,6 +424,30 @@ byte_range::contains_p (const byte_range &other, byte_range *out) const
     return false;
 }
 
+/* Return true if THIS and OTHER intersect and write the number
+   of bytes both buffers overlap to *OUT_NUM_OVERLAP_BYTES.
+
+   Otherwise return false.  */
+
+bool
+byte_range::intersects_p (const byte_range &other,
+                          byte_size_t *out_num_overlap_bytes) const
+{
+  if (get_start_byte_offset () < other.get_next_byte_offset ()
+      && other.get_start_byte_offset () < get_next_byte_offset ())
+    {
+      byte_offset_t overlap_start = MAX (get_start_byte_offset (),
+                                         other.get_start_byte_offset ());
+      byte_offset_t overlap_next = MIN (get_next_byte_offset (),
+                                        other.get_next_byte_offset ());
+      gcc_assert (overlap_next > overlap_start);
+      *out_num_overlap_bytes = overlap_next - overlap_start;
+      return true;
+    }
+  else
+    return false;
+}
+
 /* qsort comparator for byte ranges.  */
 
 int
