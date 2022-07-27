@@ -1131,7 +1131,6 @@ binding_cluster::binding_cluster (const region *base_region)
 : m_base_region (base_region), m_map (),
   m_escaped (false), m_touched (false)
 {
-  gcc_assert (base_region->tracked_p ());
 }
 
 /* binding_cluster's copy ctor.  */
@@ -2470,7 +2469,9 @@ store::set_value (store_manager *mgr, const region *lhs_reg,
 
   remove_overlapping_bindings (mgr, lhs_reg, uncertainty);
 
-  rhs_sval = simplify_for_binding (rhs_sval);
+  if (lhs_reg->get_type ())
+    rhs_sval = simplify_for_binding (rhs_sval);
+  /* ...but if we have no type for the region, retain any cast.  */
 
   const region *lhs_base_reg = lhs_reg->get_base_region ();
   binding_cluster *lhs_cluster;
