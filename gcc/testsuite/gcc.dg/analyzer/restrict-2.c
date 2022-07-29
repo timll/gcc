@@ -103,3 +103,26 @@ void test8 (void)
   int buf[4];
   fun_wrapper (buf, buf);
 }
+
+void h1 (int n, int * restrict p, const int * restrict q, int * restrict r)
+{
+  int i;
+  for (i = 0; i < n; i++)
+    p[i] = q[i] + r[i];
+}
+
+void h2 (int n, int * restrict p, const int * restrict q, const int * restrict r)
+{
+  int i;
+  for (i = 0; i < n; i++)
+    p[i] = q[i] + r[i];
+}
+
+void test9 (void)
+{
+  int a[100];
+  int b[100];
+  memset (b, 0, 100 * sizeof (int));
+  h1 (100, a, b, b);
+  h2 (100, a, b, b);
+}

@@ -1851,25 +1851,32 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
       /* Check for aliases of arguments passed
 	 to restrict-qualified parameters. */
       if (restrict_params.length () > 0)
-	for (unsigned arg_idx = 0; arg_idx < cd.num_args (); arg_idx++)
-	  {
-	    if (!POINTER_TYPE_P (cd.get_arg_type (arg_idx)))
-	      continue;
+{
+  unsigned arg_idx;
+  tree param;
+  for (arg_idx = 0, param = TYPE_ARG_TYPES (fntype);
+       arg_idx < cd.num_args () && param;
+       arg_idx++, param = TREE_CHAIN (param))
+    {
+      tree type = TREE_VALUE (param);
+      if (!POINTER_TYPE_P (type) || TYPE_READONLY (TREE_TYPE (type)))
+continue;
 
-	    const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
-	    const region *arg_reg = deref_rvalue (arg_sval,
-						  cd.get_arg_tree (arg_idx),
-						  cd.get_ctxt ());
+      const svalue *arg_sval = cd.get_arg_svalue (arg_idx);
+      const region *arg_reg = deref_rvalue (arg_sval,
+      cd.get_arg_tree (arg_idx),
+      cd.get_ctxt ());
 
-	    for (auto pair : restrict_params)
-	      {
-		unsigned restricted_idx = std::get<0> (pair);
-		const region *restricted_reg = std::get<1> (pair);
-		if (restricted_idx != arg_idx)
-		  check_region_aliases (restricted_reg, restricted_idx,
-					arg_reg, arg_idx, cd);
-	      }
-	}
+      for (auto pair : restrict_params)
+{
+  unsigned restricted_idx = std::get<0> (pair);
+  const region *restricted_reg = std::get<1> (pair);
+  if (restricted_idx != arg_idx)
+    check_region_aliases (restricted_reg, restricted_idx,
+arg_reg, arg_idx, cd);
+}
+  }
+				}
     }
   else
     unknown_side_effects = true;
