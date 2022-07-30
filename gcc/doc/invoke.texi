@@ -10121,6 +10121,18 @@ that could be under an attacker's control is used as the size of
 an operation such as @code{memset} without being sanitized, so that an
 attacker could inject an out-of-bounds access.
 
+
+@item -Wno-analyzer-out-of-bounds
+@opindex Wanalyzer-out-of-bounds
+@opindex Wno-analyzer-out-of-bounds
+This warning requires @option{-fanalyzer} to enable it; use
+@option{-Wno-analyzer-out-of-bounds} to disable it.
+
+This diagnostic warns for path through the code in which a buffer is
+accessed or written out-of-bounds.
+
+See @url{https://cwe.mitre.org/data/definitions/119.html, CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer}.
+
 @item -Wno-analyzer-unsafe-call-within-signal-handler
 @opindex Wanalyzer-unsafe-call-within-signal-handler
 @opindex Wno-analyzer-unsafe-call-within-signal-handler

@@ -516,6 +516,8 @@ region_model::impl_call_memcpy (const call_details &cd)
 					cd.get_ctxt ());
 
   check_region_overlap (src_reg, 0, dest_reg, 1, num_bytes_sval, cd);
+  check_region_bounds (src_reg, num_bytes_sval, DIR_READ, cd.get_ctxt ());
+  check_region_bounds (dest_reg, num_bytes_sval, DIR_WRITE, cd.get_ctxt ());
 
   cd.maybe_set_lhs (dest_ptr_sval);
 
@@ -543,6 +545,8 @@ region_model::impl_call_mempcpy (const call_details &cd)
 					cd.get_ctxt ());
 
   check_region_overlap (src_reg, 1, dest_reg, 0, num_bytes_sval, cd);
+  check_region_bounds (src_reg, num_bytes_sval, DIR_READ, cd.get_ctxt ());
+  check_region_bounds (dest_reg, num_bytes_sval, DIR_WRITE, cd.get_ctxt ());
 
   /* TODO: model mempcy behavior and change the
            call site in on_call_pre afterwards.  */
