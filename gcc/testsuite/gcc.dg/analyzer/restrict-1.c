@@ -91,7 +91,7 @@ void test7 (void)
 {
   memcpy_t fn = get_memcpy ();
 
-  int32_t buf[4] = {0};
+  int32_t buf[5] = {0};
   fn (buf + 3, buf + 1, 2 * sizeof(int32_t));
 }
 
@@ -99,7 +99,7 @@ void test8 (void)
 {
   memcpy_t fn = get_mempcpy ();
 
-  int32_t buf[4] = {0};
+  int32_t buf[5] = {0};
   fn (buf + 3, buf + 2, 2 * sizeof(int32_t)); /* { dg-line test8 } */
 
   /* { dg-warning "calling 'mempcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test8 } */
@@ -249,7 +249,7 @@ void test20 (int cond)
 {
   memcpy_t fn = get_memcpy ();
 
-  int32_t buf[4];
+  int32_t buf[5];
   int32_t n;
   if (cond)
     n = 2 * sizeof (int32_t);
@@ -393,6 +393,6 @@ void __attribute__((noinline)) memcpy_wrapper (void *dst, void *src, size_t coun
 
 void test28 (void)
 {
-  int32_t buf[4];
+  int32_t buf[5];
   memcpy_wrapper (buf + 2, buf, 3 * sizeof (int32_t));
 }
