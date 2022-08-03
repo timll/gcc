@@ -1616,7 +1616,7 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    return ev.formatted_print ("write at byte %E but region ends at byte %E",
+    return ev.formatted_print ("write at byte %E but region starts at byte %E",
                                m_actual_byte, m_byte_bound);
   }
 };
@@ -1666,7 +1666,7 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    return ev.formatted_print ("access at byte %E but region ends at byte %E",
+    return ev.formatted_print ("access at byte %E but region starts at byte %E",
                                m_actual_byte, m_byte_bound);
   }
 };
@@ -1675,28 +1675,29 @@ public:
    about a read or write that is out-of-bounds.  */
 
 static void
-check_region_bounds_2 (const region *reg, const svalue *capacity,
-                       tree num_bytes_tree, const region_offset reg_offset,
-                       enum access_direction dir, region_model_context *ctxt)
+check_region_upper_bound_2 (const region *reg, const svalue *capacity,
+                            tree num_bytes_tree, byte_size_t offset,
+                            enum access_direction dir,
+                            region_model_context *ctxt)
 {
-  gcc_assert (!reg_offset.symbolic_p ());
   gcc_assert (TREE_CODE (num_bytes_tree) == INTEGER_CST);
 
   if (tree cst_capacity_tree = capacity->maybe_get_constant ())
     {
       if (TREE_CODE (cst_capacity_tree) == INTEGER_CST)
         {
-          byte_size_t offset
-            = (reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT)
-              + (wi::to_offset (num_bytes_tree).to_uhwi ());
-          if (!zerop (num_bytes_tree))
-            offset -= 1;
+          byte_size_t bytes_copied = wi::to_offset (num_bytes_tree).to_uhwi ();
+          byte_size_t last_byte
+            = bytes_copied == 0 ? offset : offset + bytes_copied - 1;
           byte_size_t size = wi::to_offset (cst_capacity_tree);
 
-          if (offset >= size)
+          // debug_tree (wide_int_to_tree (integer_type_node, offset));
+          // debug_tree (wide_int_to_tree (integer_type_node, size));
+
+          if (last_byte >= size)
             {
               tree byte_bound = wide_int_to_tree (size_type_node, size);
-              tree actual_byte = wide_int_to_tree (size_type_node, offset);
+              tree actual_byte = wide_int_to_tree (size_type_node, last_byte);
               switch (dir)
                 {
                 default:
@@ -1712,34 +1713,15 @@ check_region_bounds_2 (const region *reg, const svalue *capacity,
                   break;
                 }
             }
-          else if (offset < 0)
-            {
-              tree byte_bound = build_zero_cst (integer_type_node);
-              tree actual_byte = wide_int_to_tree (integer_type_node, offset);
-              switch (dir)
-                {
-                default:
-                  gcc_unreachable ();
-                  break;
-                case DIR_READ:
-                  ctxt->warn (new buffer_underread (reg, byte_bound,
-                                                    actual_byte));
-                  break;
-                case DIR_WRITE:
-                  ctxt->warn (new buffer_underflow (reg, byte_bound,
-                                                    actual_byte));
-                  break;
-                }
-            }
         }
     }
   else if (const widening_svalue *w_capacity
             = dyn_cast <const widening_svalue *> (capacity))
     {
-      check_region_bounds_2 (reg, w_capacity->get_base_svalue (),
-                             num_bytes_tree, reg_offset, dir, ctxt);
-      check_region_bounds_2 (reg, w_capacity->get_iter_svalue (),
-                             num_bytes_tree, reg_offset, dir, ctxt);
+      check_region_upper_bound_2 (reg, w_capacity->get_base_svalue (),
+                                  num_bytes_tree, offset, dir, ctxt);
+      check_region_upper_bound_2 (reg, w_capacity->get_iter_svalue (),
+                                  num_bytes_tree, offset, dir, ctxt);
     }
 }
 
@@ -1748,49 +1730,58 @@ check_region_bounds_2 (const region *reg, const svalue *capacity,
    about a out-of-bounds read/write.  */
 
 static void
-check_region_bounds_1 (const region *reg, const svalue *capacity,
-                       const svalue *num_bytes_sval,
-                       const region_offset reg_offset,
-                       enum access_direction dir,
-                       region_model_context *ctxt)
+check_region_upper_bound_1 (const region *reg, const svalue *capacity,
+                            const svalue *num_bytes_sval, byte_size_t offset,
+                            enum access_direction dir,
+                            region_model_context *ctxt)
 {
-  gcc_assert (!reg_offset.symbolic_p ());
-
   num_bytes_sval = num_bytes_sval->unwrap_cast ();
   if (tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
     {
       if (TREE_CODE (num_bytes_tree) == INTEGER_CST)
-        check_region_bounds_2 (reg, capacity, num_bytes_tree,
-                               reg_offset, dir, ctxt);
+        check_region_upper_bound_2 (reg, capacity, num_bytes_tree,
+                                    offset, dir, ctxt);
     }
   else if (const widening_svalue *w_num_bytes_sval
             = dyn_cast <const widening_svalue *> (num_bytes_sval))
     {
-      check_region_bounds_1 (reg, capacity,
-                             w_num_bytes_sval->get_base_svalue (),
-                             reg_offset, dir, ctxt);
-      check_region_bounds_1 (reg, capacity,
-                             w_num_bytes_sval->get_iter_svalue (),
-                             reg_offset, dir, ctxt);
+      check_region_upper_bound_1 (reg, capacity,
+                                  w_num_bytes_sval->get_base_svalue (),
+                                  offset, dir, ctxt);
+      check_region_upper_bound_1 (reg, capacity,
+                                  w_num_bytes_sval->get_iter_svalue (),
+                                  offset, dir, ctxt);
     }
 }
 
-/* May complain when a write/read of NUM_BYTES_SVAL bytes is out-of-bounds.
+/* Checks the lower bound */
 
-   Assumes that NUM_BYTES_SVAL is viewed as unsigned.  */
-
-void region_model::check_region_bounds (const region *reg,
-                                        const svalue *num_bytes_sval,
-                                        enum access_direction dir,
-                                        region_model_context *ctxt) const
+static void
+check_region_lower_bound (const region *reg,
+                          byte_offset_t offset,
+                          enum access_direction dir,
+                          region_model_context *ctxt)
 {
-  region_offset reg_offset = reg->get_offset ();
-  const region *base_reg = reg_offset.get_base_region ();
-  if (reg_offset.symbolic_p ())
-    return;
+  if (offset < 0)
+    {
+      tree byte_bound = build_zero_cst (integer_type_node);
+      tree actual_byte = wide_int_to_tree (integer_type_node, offset);
 
-  const svalue *capacity = get_capacity (base_reg);
-  check_region_bounds_1 (reg, capacity, num_bytes_sval, reg_offset, dir, ctxt);
+      switch (dir)
+        {
+        default:
+          gcc_unreachable ();
+          break;
+        case DIR_READ:
+          ctxt->warn (new buffer_underread (reg, byte_bound,
+                                            actual_byte));
+          break;
+        case DIR_WRITE:
+          ctxt->warn (new buffer_underflow (reg, byte_bound,
+                                            actual_byte));
+          break;
+        }
+    }
 }
 
 /* May complain when the read/written byte is out-of-bounds.  */
@@ -1799,14 +1790,47 @@ void region_model::check_region_bounds (const region *reg,
                                         enum access_direction dir,
                                         region_model_context *ctxt) const
 {
+  gcc_assert (ctxt);
+
+  /* The size argument of memcpy is unsigned and handled differently
+     than a offset/element access.  */
+  const svalue *num_bytes_sval = NULL;
+  if (const sized_region *sized_reg = dyn_cast <const sized_region *> (reg))
+    {
+      num_bytes_sval = sized_reg->get_byte_size_sval (NULL);
+      reg = reg->get_parent_region ();
+    }
+
   region_offset reg_offset = reg->get_offset ();
   const region *base_reg = reg_offset.get_base_region ();
   if (reg_offset.symbolic_p ())
     return;
 
+  byte_offset_t offset = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+
+  /* Prevent false-positives in case of patterns like container_of
+     from the Linux Kernel with symbolic regions. 
+     
+     In cases where we only have a symbolic_region to the inner struct but the
+     code tries to retrieve an outer struct (i.e. by subtracting a number from
+     the pointer to the inner struct), we do not know whether the result may
+     point within the outer struct.
+     While in theory, this pattern could also be done with pointers to
+     non-structs, I don't think that we'll encounter that in real-world
+     programs. But in case we do, remove the second subcondition.  */
+  tree base_type = base_reg->get_type ();
+  if (!base_reg->symbolic_p () || !base_type
+      || !RECORD_OR_UNION_TYPE_P (base_type))
+    check_region_lower_bound (reg, offset, dir, ctxt);
+
   const svalue *capacity = get_capacity (base_reg);
-  tree zero_tree = build_int_cst (size_type_node, 0);
-  check_region_bounds_2 (reg, capacity, zero_tree, reg_offset, dir, ctxt);
+  if (num_bytes_sval)
+    check_region_upper_bound_1 (reg, capacity, num_bytes_sval, offset,
+                                dir, ctxt);
+  else
+    check_region_upper_bound_2 (reg, capacity,
+                                build_int_cst (size_type_node, 0),
+                                offset,dir, ctxt);
 }
 
 /* Ensure that all arguments at the call described by CD are checked
@@ -3407,17 +3431,17 @@ region_model::check_region_access (const region *reg,
     return;
 
   check_region_for_taint (reg, dir, ctxt);
+  check_region_bounds (reg, dir, ctxt);
 
   switch (dir)
     {
     default:
       gcc_unreachable ();
     case DIR_READ:
-      check_region_bounds (reg, dir, ctxt);
+      /* Currently a no-op.  */
       break;
     case DIR_WRITE:
       check_for_writable_region (reg, ctxt);
-      check_region_bounds (reg, dir, ctxt);
       break;
     }
 }

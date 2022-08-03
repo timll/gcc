@@ -94,3 +94,49 @@ void test8 (void)
   /* { dg-warning "underread" "warning" { target *-*-* } test8 } */
   /* { dg-message "" "note" { target *-*-* } test8 } */
 }
+
+/* Further reduced container_of pattern from the Linux Kernel.  */
+
+struct inner {
+  /* Don't care */
+};
+
+struct outer {
+  int i;
+  struct inner inner_struct;
+};
+
+struct outer *get_container (struct inner *ptr_to_inner)
+{
+  struct outer *ptr_to_outer = ((struct outer *) (((void *) ptr_to_inner) - __builtin_offsetof(struct outer, inner_struct)));
+  return ptr_to_outer;
+}
+
+int test_case (struct outer *outer_p, struct inner *inner_p)
+{
+  struct outer test;
+  test.i = 42;
+  int sum = 0;
+  struct outer *o;
+
+  /* Symbolic inner struct.  */
+  o = get_container (inner_p);
+  sum += o->i; // ok
+  /* not ok, but we can't be sure that outer
+     is actually the container of inner.  */
+  sum += (o - 1)->i;
+  /* Symbolic outer struct.  */
+  o = get_container (&(outer_p->inner_struct));
+  sum += o->i; // ok
+  /* not ok, but indistinguishable from the case above.  */
+  sum += (o - 1)->i;
+  /* Concrete outer struct.  */
+  o = get_container (&(test.inner_struct));
+  sum += o->i;  // ok
+  /* not ok, but this time we do not have a symbolic region.  */
+  sum += (o - 1)->i; /* { dg-line test9 } */
+
+  return sum;
+  /* { dg-warning "underread" "warning" { target *-*-* } test9 } */
+  /* { dg-message "" "note" { target *-*-* } test9 } */
+}

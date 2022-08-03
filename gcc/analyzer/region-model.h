@@ -870,10 +870,6 @@ class region_model
 			  region_model_context *ctxt) const;
   void check_region_bounds (const region *reg, enum access_direction dir,
                             region_model_context *ctxt) const;
-  void check_region_bounds (const region *reg,
-                            const svalue *num_bytes_sval,
-                            enum access_direction dir,
-                            region_model_context *ctxt) const;
 
   void check_region_aliases (const region *src, unsigned src_idx,
                              const region *dst, unsigned dst_idx,
