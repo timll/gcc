@@ -1913,8 +1913,8 @@ void region_model::check_region_bounds (const region *reg,
      Not sure whether this is also done on primitive members of a struct.
      But in case it is, remove the second subcondition.  */
   tree base_type = base_reg->get_type ();
-  if (!base_reg->symbolic_p () || !base_type
-      || !RECORD_OR_UNION_TYPE_P (base_type))
+  if (!base_reg->symbolic_p ()
+      || (base_type && !RECORD_OR_UNION_TYPE_P (base_type)))
     check_region_lower_bound (reg, offset, dir, ctxt);
   
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
