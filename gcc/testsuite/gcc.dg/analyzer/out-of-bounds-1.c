@@ -77,7 +77,7 @@ void test5 (void)
 }
 
 /* Taken from "A Provenance-aware Memory Object Model for C".  */
-int y = 2, x = 1; /* { dg-message "region created here" } */
+int y = 2, x = 1; /* { dg-message "capacity" } */
 void test6 (void)
 {
   int *p = &x + 1;

@@ -106,13 +106,13 @@ struct outer {
   struct inner inner_struct;
 };
 
-struct outer *get_container (struct inner *ptr_to_inner)
+struct outer *container_of (struct inner *ptr_to_inner)
 {
   struct outer *ptr_to_outer = ((struct outer *) (((void *) ptr_to_inner) - __builtin_offsetof(struct outer, inner_struct)));
   return ptr_to_outer;
 }
 
-int test_case (struct outer *outer_p, struct inner *inner_p)
+int test9 (struct outer *outer_p, struct inner *inner_p)
 {
   struct outer test;
   test.i = 42;
@@ -120,18 +120,18 @@ int test_case (struct outer *outer_p, struct inner *inner_p)
   struct outer *o;
 
   /* Symbolic inner struct.  */
-  o = get_container (inner_p);
+  o = container_of (inner_p);
   sum += o->i; // ok
   /* not ok, but we can't be sure that outer
      is actually the container of inner.  */
   sum += (o - 1)->i;
   /* Symbolic outer struct.  */
-  o = get_container (&(outer_p->inner_struct));
+  o = container_of (&(outer_p->inner_struct));
   sum += o->i; // ok
   /* not ok, but indistinguishable from the case above.  */
   sum += (o - 1)->i;
   /* Concrete outer struct.  */
-  o = get_container (&(test.inner_struct));
+  o = container_of (&(test.inner_struct));
   sum += o->i;  // ok
   /* not ok, but this time we do not have a symbolic region.  */
   sum += (o - 1)->i; /* { dg-line test9 } */

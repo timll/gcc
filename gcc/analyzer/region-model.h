@@ -733,6 +733,7 @@ class region_model
 					  region_model_context *ctxt);
 
   tree get_representative_tree (const svalue *sval) const;
+  tree get_representative_tree (const region *reg) const;
   path_var
   get_representative_path_var (const svalue *sval,
 			       svalue_set *visited) const;
@@ -870,6 +871,18 @@ class region_model
 			  region_model_context *ctxt) const;
   void check_region_bounds (const region *reg, enum access_direction dir,
                             region_model_context *ctxt) const;
+  void check_region_upper_bound_1 (const region *reg, const svalue *capacity,
+                                   const svalue *num_bytes_sval,
+                                   byte_size_t offset,
+                                   enum access_direction dir,
+                                   region_model_context *ctxt) const;
+  void check_region_upper_bound_2 (const region *reg, const svalue *capacity,
+                                   tree num_bytes_tree, byte_size_t offset,
+                                   enum access_direction dir,
+                                   region_model_context *ctxt) const;
+  void check_region_lower_bound (const region *reg, byte_offset_t offset,
+                                 enum access_direction dir,
+                                 region_model_context *ctxt) const;
 
   void check_region_aliases (const region *src, unsigned src_idx,
                              const region *dst, unsigned dst_idx,
