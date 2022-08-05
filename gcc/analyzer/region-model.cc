@@ -1625,6 +1625,8 @@ public:
 
     if (warned)
       {
+
+    m_reg->dump (false);
         tree last_byte_of_buf = fold_binary (MINUS_EXPR, size_type_node,
                                              m_byte_bound, integer_one_node);
         tree num_bytes_past = fold_binary (MINUS_EXPR, size_type_node,
@@ -1675,6 +1677,8 @@ public:
 
     if (warned)
       {
+
+    m_reg->dump (false);
         tree last_byte_of_buf = fold_binary (MINUS_EXPR, size_type_node,
                                              m_byte_bound, integer_one_node);
         tree num_bytes_past = fold_binary (MINUS_EXPR, size_type_node,
@@ -1719,6 +1723,7 @@ public:
   {
     diagnostic_metadata m;
     m.add_cwe (124);
+    m_reg->dump (false);
     return warning_meta (rich_loc, m, get_controlling_option (),
                          "buffer underflow");
   }
@@ -1748,6 +1753,7 @@ public:
   {
     diagnostic_metadata m;
     m.add_cwe (127);
+    m_reg->dump (false);
     return warning_meta (rich_loc, m, get_controlling_option (),
                          "buffer underread");
   }
