@@ -1843,6 +1843,7 @@ region_model::check_region_upper_bound_1 (const region *reg,
   else if (const widening_svalue *w_num_bytes_sval
             = dyn_cast <const widening_svalue *> (num_bytes_sval))
     {
+      /* If we have two possible values, then check both.  */
       check_region_upper_bound_1 (reg, capacity,
                                   w_num_bytes_sval->get_base_svalue (),
                                   offset, dir, ctxt);
@@ -1906,25 +1907,10 @@ void region_model::check_region_bounds (const region *reg,
   /* Prevent false-positives with negative offsets from symbolic_regions.
   
      Because the analyzer did not see the positive offsets before, it might
-     think that a negative access is before the buffer.
-
-     We do not check for the lower bound if the region is symbolic and
-       1. the pointer to the region is a widening_svalue
-       2. or the type is not available
-       3. or the type is a struct type.
-     The first conditions stops the analyzer from complaining when the
-     path with region+1 and region got merged together (c.f.
-     out-of-bounds-coreutils.c) while the second and third condition prevent
-     false positives on the cointainer_of pattern from the Linux Kernel, where
-     a pointer to the outer struct is calculated by subtracting the offset from
-     the inner struct.  */
-  const symbolic_region *sym_base_reg
-    = dyn_cast <const symbolic_region *> (base_reg);
-  tree base_type = base_reg->get_type ();
-  if (!sym_base_reg
-      || (sym_base_reg->get_pointer ()->get_kind () != SK_WIDENING
-          && base_type && !RECORD_OR_UNION_TYPE_P (base_type)))
+     think that a negative access is before the buffer.  */
+  if (!base_reg->symbolic_p ())
     check_region_lower_bound (reg, offset, dir, ctxt);
+
 
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
   const svalue *capacity = get_capacity (base_reg);
