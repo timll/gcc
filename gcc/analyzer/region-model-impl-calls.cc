@@ -798,7 +798,7 @@ region_model::impl_call_realloc (const call_details &cd)
 
   private:
     const svalue *get_copied_size (const svalue *old_size_sval,
-				   const svalue *new_size_sval)
+				   const svalue *new_size_sval) const
     {
       tree old_size_cst = old_size_sval->maybe_get_constant ();
       tree new_size_cst = new_size_sval->maybe_get_constant ();
