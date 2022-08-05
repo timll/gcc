@@ -1903,20 +1903,29 @@ void region_model::check_region_bounds (const region *reg,
 
   byte_offset_t offset = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
 
-  /* Prevent false-positives in case of patterns like container_of
-     from the Linux Kernel with symbolic regions.
-
-     In cases where we only have a symbolic_region to the inner struct but the
-     code tries to retrieve an outer struct (i.e. by subtracting a number from
-     the pointer to the inner struct), we do not know whether the result may
-     point within the outer struct.
-     Not sure whether this is also done on primitive members of a struct.
-     But in case it is, remove the second subcondition.  */
-  tree base_type = base_reg->get_type ();
-  if (!base_reg->symbolic_p ()
-      || (base_type && !RECORD_OR_UNION_TYPE_P (base_type)))
-    check_region_lower_bound (reg, offset, dir, ctxt);
+  /* Prevent false-positives with negative offsets from symbolic_regions.
   
+     Because the analyzer did not see the positive offsets before, it might
+     think that a negative access is before the buffer.
+
+     We do not check for the lower bound if the region is symbolic and
+       1. the pointer to the region is a widening_svalue
+       2. or the type is not available
+       3. or the type is a struct type.
+     The first conditions stops the analyzer from complaining when the
+     path with region+1 and region got merged together (c.f.
+     out-of-bounds-coreutils.c) while the second and third condition prevent
+     false positives on the cointainer_of pattern from the Linux Kernel, where
+     a pointer to the outer struct is calculated by subtracting the offset from
+     the inner struct.  */
+  const symbolic_region *sym_base_reg
+    = dyn_cast <const symbolic_region *> (base_reg);
+  tree base_type = base_reg->get_type ();
+  if (!sym_base_reg
+      || (sym_base_reg->get_pointer ()->get_kind () != SK_WIDENING
+          && base_type && !RECORD_OR_UNION_TYPE_P (base_type)))
+    check_region_lower_bound (reg, offset, dir, ctxt);
+
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
   const svalue *capacity = get_capacity (base_reg);
   check_region_upper_bound_1 (reg, capacity, num_bytes_sval, offset,
