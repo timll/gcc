@@ -75,6 +75,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "calls.h"
 #include "is-a.h"
 #include "print-tree.h"
+#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -1625,8 +1626,6 @@ public:
 
     if (warned)
       {
-
-    m_reg->dump (false);
         tree last_byte_of_buf = fold_binary (MINUS_EXPR, size_type_node,
                                              m_byte_bound, integer_one_node);
         tree num_bytes_past = fold_binary (MINUS_EXPR, size_type_node,
@@ -1677,8 +1676,6 @@ public:
 
     if (warned)
       {
-
-    m_reg->dump (false);
         tree last_byte_of_buf = fold_binary (MINUS_EXPR, size_type_node,
                                              m_byte_bound, integer_one_node);
         tree num_bytes_past = fold_binary (MINUS_EXPR, size_type_node,
@@ -1723,7 +1720,6 @@ public:
   {
     diagnostic_metadata m;
     m.add_cwe (124);
-    m_reg->dump (false);
     return warning_meta (rich_loc, m, get_controlling_option (),
                          "buffer underflow");
   }
@@ -1753,7 +1749,6 @@ public:
   {
     diagnostic_metadata m;
     m.add_cwe (127);
-    m_reg->dump (false);
     return warning_meta (rich_loc, m, get_controlling_option (),
                          "buffer underread");
   }
@@ -1917,11 +1912,19 @@ void region_model::check_region_bounds (const region *reg,
   if (!base_reg->symbolic_p ())
     check_region_lower_bound (reg, offset, dir, ctxt);
 
-
-  const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
   const svalue *capacity = get_capacity (base_reg);
-  check_region_upper_bound_1 (reg, capacity, num_bytes_sval, offset,
-                              dir, ctxt);
+  const svalue *num_bytes_sval;
+  if (const sized_region *sized_reg = dyn_cast <const sized_region *> (reg))
+    {
+      num_bytes_sval = sized_reg->get_byte_size_sval (NULL);
+      check_region_upper_bound_1 (reg, capacity, num_bytes_sval, offset,
+                                  dir, ctxt);
+    }
+  else
+    {
+      check_region_upper_bound_2 (reg, capacity, integer_one_node,
+                                  offset, dir, ctxt);
+    }
 }
 
 /* Ensure that all arguments at the call described by CD are checked

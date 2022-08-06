@@ -797,6 +797,7 @@ region_model::impl_call_realloc (const call_details &cd)
     }
 
   private:
+    /* Return the size svalue for the new region allocated by realloc.  */
     const svalue *get_copied_size (const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
