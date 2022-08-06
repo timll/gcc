@@ -1879,6 +1879,8 @@ region_model::check_region_lower_bound (const region *reg,
           gcc_unreachable ();
           break;
         case DIR_READ:
+          reg->dump (false);
+          reg->get_base_region ()->dump (false);
           ctxt->warn (new buffer_underread (reg, diag_arg, actual_byte));
           break;
         case DIR_WRITE:
