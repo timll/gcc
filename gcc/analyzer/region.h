@@ -910,6 +910,8 @@ public:
   const svalue *get_byte_offset () const { return m_byte_offset; }
 
   bool get_relative_concrete_offset (bit_offset_t *out) const final override;
+  const svalue * get_byte_size_sval (region_model_manager *mgr) const;
+
 
 private:
   const svalue *m_byte_offset;

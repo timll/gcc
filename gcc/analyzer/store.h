@@ -313,6 +313,12 @@ struct byte_range
   bool intersects_p (const byte_range &other,
                      byte_size_t *out_num_overlap_bytes) const;
 
+  bool exceeds_p (const byte_range &other,
+                  byte_range *out_overhanging_byte_range) const;
+
+  bool falls_short_of_p (byte_offset_t offset,
+                         byte_range *out_fall_short_bytes) const;
+
   byte_offset_t get_start_byte_offset () const
   {
     return m_start_byte_offset;
