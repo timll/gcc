@@ -1865,6 +1865,12 @@ void region_model::check_region_bounds (const region *reg,
        assume that at least one byte was read/written.  */
     num_bytes_tree = integer_one_node;
 
+
+  const svalue *capacity = get_capacity (base_reg);
+  tree cst_capacity_tree = capacity->maybe_get_constant ();
+  if (!cst_capacity_tree || TREE_CODE (cst_capacity_tree) != INTEGER_CST)
+    return;
+
   byte_range out (0, 0);
   byte_range read_bytes (offset, wi::to_offset (num_bytes_tree).to_uhwi ());
   /* If read_bytes has a subset < 0, we do have an underflow.  */
@@ -1884,11 +1890,6 @@ void region_model::check_region_bounds (const region *reg,
           break;
         }
     }
-
-  const svalue *capacity = get_capacity (base_reg);
-  tree cst_capacity_tree = capacity->maybe_get_constant ();
-  if (!cst_capacity_tree || TREE_CODE (cst_capacity_tree) != INTEGER_CST)
-    return;
 
   byte_range buffer (0, wi::to_offset (cst_capacity_tree));
   /* If READ_BYTES exceeds BUFFER, we do have an overflow.  */
