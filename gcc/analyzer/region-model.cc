@@ -1536,8 +1536,8 @@ public:
   bool operator== (const out_of_bounds &other) const
   {
     return m_reg == other.m_reg
-           && m_range == other.m_range
-           && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg);
+	   && m_range == other.m_range
+	   && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg);
   }
 
   int get_controlling_option () const final override
@@ -1563,7 +1563,7 @@ class past_the_end : public out_of_bounds
 {
 public:
   past_the_end (const region *reg, tree diag_arg, byte_range range,
-        	tree byte_bound)
+		tree byte_bound)
   : out_of_bounds (reg, diag_arg, range), m_byte_bound (byte_bound)
   {}
 
@@ -1666,10 +1666,10 @@ public:
 	  return ev.formatted_print ("out-of-bounds write from byte %s till"
 				     " byte %s but %qE ends at byte %E",
 				     start_buf, end_buf, m_diag_arg,
-	                             m_byte_bound);
-        return ev.formatted_print ("out-of-bounds write from byte %s till"
-                                   " byte %s but region ends at byte %E",
-                                   start_buf, end_buf, m_byte_bound);
+				     m_byte_bound);
+	return ev.formatted_print ("out-of-bounds write from byte %s till"
+				   " byte %s but region ends at byte %E",
+				   start_buf, end_buf, m_byte_bound);
       }
   }
 };
@@ -1680,7 +1680,7 @@ class buffer_overread : public past_the_end
 {
 public:
   buffer_overread (const region *reg, tree diag_arg,
-                   byte_range range, tree byte_bound)
+		   byte_range range, tree byte_bound)
   : past_the_end (reg, diag_arg, range, byte_bound)
   {}
 
@@ -1689,20 +1689,20 @@ public:
     diagnostic_metadata m;
     m.add_cwe (126);
     bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-                                "buffer overread");
+				"buffer overread");
 
     if (warned)
       {
-        char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
-        print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
-        if (m_diag_arg)
-          inform (rich_loc->get_loc (), "write is %s bytes past the end"
-                                        " of %qE", num_bytes_past_buf,
-                                                    m_diag_arg);
-        else
-          inform (rich_loc->get_loc (), "write is %s bytes past the end"
-                                        "of the region",
-                                        num_bytes_past_buf);
+	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
+	print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
+	if (m_diag_arg)
+	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
+					" of %qE", num_bytes_past_buf,
+						    m_diag_arg);
+	else
+	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
+					"of the region",
+					num_bytes_past_buf);
       }
 
     return warned;
@@ -1720,24 +1720,24 @@ public:
 
     if (start == end)
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds read at byte %s but %qE"
-                                     " ends at byte %E", start_buf, m_diag_arg,
-                                                         m_byte_bound);
-        return ev.formatted_print ("out-of-bounds read at byte %s but region"
-                                   " ends at byte %E", start_buf,
-                                                       m_byte_bound);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds read at byte %s but %qE"
+				     " ends at byte %E", start_buf, m_diag_arg,
+							 m_byte_bound);
+	return ev.formatted_print ("out-of-bounds read at byte %s but region"
+				   " ends at byte %E", start_buf,
+						       m_byte_bound);
       }
     else
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds read from byte %s till"
-                                     " byte %s but %qE ends at byte %E",
-                                     start_buf, end_buf, m_diag_arg,
-                                     m_byte_bound);
-        return ev.formatted_print ("out-of-bounds read from byte %s till"
-                                   " byte %s but region ends at byte %E",
-                                   start_buf, end_buf, m_byte_bound);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds read from byte %s till"
+				     " byte %s but %qE ends at byte %E",
+				     start_buf, end_buf, m_diag_arg,
+				     m_byte_bound);
+	return ev.formatted_print ("out-of-bounds read from byte %s till"
+				   " byte %s but region ends at byte %E",
+				   start_buf, end_buf, m_byte_bound);
       }
   }
 };
@@ -1756,7 +1756,7 @@ public:
     diagnostic_metadata m;
     m.add_cwe (124);
     return warning_meta (rich_loc, m, get_controlling_option (),
-                         "buffer underflow");
+			 "buffer underflow");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev)
@@ -1771,22 +1771,22 @@ public:
 
     if (start == end)
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds write at byte %s but %qE"
-                                     " starts at byte 0", start_buf,
-                                                          m_diag_arg);
-        return ev.formatted_print ("out-of-bounds write at byte %s but region"
-                                   " starts at byte 0", start_buf);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds write at byte %s but %qE"
+				     " starts at byte 0", start_buf,
+							  m_diag_arg);
+	return ev.formatted_print ("out-of-bounds write at byte %s but region"
+				   " starts at byte 0", start_buf);
       }
     else
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds write from byte %s till"
-                                     " byte %s but %qE starts at byte 0",
-                                     start_buf, end_buf, m_diag_arg);
-        return ev.formatted_print ("out-of-bounds write from byte %s till"
-                                   " byte %s but region starts at byte 0",
-                                   start_buf, end_buf);;
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds write from byte %s till"
+				     " byte %s but %qE starts at byte 0",
+				     start_buf, end_buf, m_diag_arg);
+	return ev.formatted_print ("out-of-bounds write from byte %s till"
+				   " byte %s but region starts at byte 0",
+				   start_buf, end_buf);;
       }
   }
 };
@@ -1805,7 +1805,7 @@ public:
     diagnostic_metadata m;
     m.add_cwe (127);
     return warning_meta (rich_loc, m, get_controlling_option (),
-                         "buffer underread");
+			 "buffer underread");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev)
@@ -1820,22 +1820,22 @@ public:
 
     if (start == end)
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds read at byte %s but %qE"
-                                     " starts at byte 0", start_buf,
-                                                          m_diag_arg);
-        return ev.formatted_print ("out-of-bounds read at byte %s but region"
-                                  " starts at byte 0", start_buf);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds read at byte %s but %qE"
+				     " starts at byte 0", start_buf,
+							  m_diag_arg);
+	return ev.formatted_print ("out-of-bounds read at byte %s but region"
+				  " starts at byte 0", start_buf);
       }
     else
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds read from byte %s till"
-                                     " byte %s but %qE starts at byte 0",
-                                     start_buf, end_buf, m_diag_arg);
-        return ev.formatted_print ("out-of-bounds read from byte %s till"
-                                   " byte %s but region starts at byte 0",
-                                   start_buf, end_buf);;
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds read from byte %s till"
+				     " byte %s but %qE starts at byte 0",
+				     start_buf, end_buf, m_diag_arg);
+	return ev.formatted_print ("out-of-bounds read from byte %s till"
+				   " byte %s but region starts at byte 0",
+				   start_buf, end_buf);;
       }
   }
 };
@@ -1843,8 +1843,8 @@ public:
 /* May complain when the access on REG is out-of-bounds.  */
 
 void region_model::check_region_bounds (const region *reg,
-                                        enum access_direction dir,
-                                        region_model_context *ctxt) const
+					enum access_direction dir,
+					region_model_context *ctxt) const
 {
   gcc_assert (ctxt);
 
@@ -1874,17 +1874,17 @@ void region_model::check_region_bounds (const region *reg,
     {
       tree diag_arg = get_representative_tree (reg->get_base_region ());
       switch (dir)
-        {
-        default:
-          gcc_unreachable ();
-          break;
-        case DIR_READ:
-          ctxt->warn (new buffer_underread (reg, diag_arg, out));
-          break;
-        case DIR_WRITE:
-          ctxt->warn (new buffer_underflow (reg, diag_arg, out));
-          break;
-        }
+	{
+	default:
+	  gcc_unreachable ();
+	  break;
+	case DIR_READ:
+	  ctxt->warn (new buffer_underread (reg, diag_arg, out));
+	  break;
+	case DIR_WRITE:
+	  ctxt->warn (new buffer_underflow (reg, diag_arg, out));
+	  break;
+	}
     }
 
   const svalue *capacity = get_capacity (base_reg);
@@ -1897,21 +1897,21 @@ void region_model::check_region_bounds (const region *reg,
   if (read_bytes.exceeds_p (buffer, &out))
     {
       tree byte_bound = wide_int_to_tree (size_type_node,
-                                          buffer.get_next_byte_offset ());
+					  buffer.get_next_byte_offset ());
       tree diag_arg = get_representative_tree (reg->get_base_region ());
 
       switch (dir)
-        {
-        default:
-          gcc_unreachable ();
-          break;
-        case DIR_READ:
-          ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound));
-          break;
-        case DIR_WRITE:
-          ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound));
-          break;
-        }
+	{
+	default:
+	  gcc_unreachable ();
+	  break;
+	case DIR_READ:
+	  ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound));
+	  break;
+	case DIR_WRITE:
+	  ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound));
+	  break;
+	}
     }
 }
 
@@ -3014,8 +3014,8 @@ region_model::get_rvalue_1 (path_var pv, region_model_context *ctxt) const
       }
     case OBJ_TYPE_REF:
       {
-        tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
-        return get_rvalue (expr, ctxt);
+	tree expr = OBJ_TYPE_REF_EXPR (pv.m_tree);
+	return get_rvalue (expr, ctxt);
       }
     }
 }
