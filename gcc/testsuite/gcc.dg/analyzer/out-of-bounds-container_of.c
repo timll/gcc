@@ -26,20 +26,20 @@ int test (struct outer *outer_p, struct inner *inner_p)
   /* Symbolic inner struct.  */
   o = container_of (inner_p);
   sum += o->i; // ok
-  /* not ok, but we can't be sure that outer
+  /* Not ok, but we can't be sure that outer
      is actually the container of inner.  */
   sum += (o - 1)->i;
   /* Symbolic outer struct.  */
   o = container_of (&(outer_p->inner_struct));
   sum += o->i; // ok
-  /* not ok, but indistinguishable from the case above.  */
+  /* Not ok, but indistinguishable from the case above.  */
   sum += (o - 1)->i;
   /* Concrete outer struct.  */
   o = container_of (&(test.inner_struct));
   sum += o->i;  // ok
-  /* not ok, but this time we do not have a symbolic region.  */
+  /* Not ok and we do have a concrete region.  */
   sum += (o - 1)->i; /* { dg-line testA } */
-  /* Local inner struct, has no container.  */
+  /* Concrete inner struct, has no container.  */
   o = container_of (&test2);
   sum += o->i; /* { dg-line testB } */
 

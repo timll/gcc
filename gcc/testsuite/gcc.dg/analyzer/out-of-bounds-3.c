@@ -16,7 +16,6 @@ get_memcpy (void)
 void test1 (void)
 {
   int buf[4];
-  /* This actually compiles down to &buf + 18446744073709551612.  */ 
   int *e = buf - 1;
   *e = 42; /* { dg-line test1 } */
 
@@ -29,8 +28,6 @@ void test2 (void)
   int buf[4];
   int *e = buf + 1;
   *e = 123;
-  /* This actually compiles down to e_2 + 18446744073709551612.
-     Doesn't seem to be defined behavior?  */
   *(e - 1) = 321;
 }
 
@@ -39,8 +36,6 @@ void test3 (void)
   int buf[4];
   int *e = buf + 1;
   *e = 123;
-  /* This compiles down to e_2 + 18446744073709551612. Doesn't seem
-     to be defined behavior?  */
   *(e - 2) = 321; /* { dg-line test3 } */
 
   /* { dg-warning "underflow" "warning" { target *-*-* } test3 } */

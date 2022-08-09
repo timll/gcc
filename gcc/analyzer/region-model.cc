@@ -74,8 +74,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
-#include "print-tree.h"
-#include "gimple-pretty-print.h"
 
 #if ENABLE_ANALYZER
 
@@ -1538,7 +1536,8 @@ public:
   bool operator== (const out_of_bounds &other) const
   {
     return m_reg == other.m_reg
-           && m_range == other.m_range;
+           && m_range == other.m_range
+           && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg);
   }
 
   int get_controlling_option () const final override
@@ -1557,22 +1556,24 @@ protected:
   byte_range m_range;
 };
 
-/* Abstract subclass to represent out-of-bounds past the end of the buffer.  */
+/* Abstract subclass to complaing about out-of-bounds
+   past the end of the buffer.  */
 
 class past_the_end : public out_of_bounds
 {
 public:
   past_the_end (const region *reg, tree diag_arg, byte_range range,
-                tree byte_bound)
+        	tree byte_bound)
   : out_of_bounds (reg, diag_arg, range), m_byte_bound (byte_bound)
   {}
 
   bool operator== (const past_the_end &other) const
   {
     return m_reg == other.m_reg
-           && m_range == other.m_range
-           && pending_diagnostic::same_tree_p (m_byte_bound,
-                                               other.m_byte_bound);
+	   && m_range == other.m_range
+	   && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg)
+	   && pending_diagnostic::same_tree_p (m_byte_bound,
+					       other.m_byte_bound);
   }
 
   label_text
@@ -1595,7 +1596,7 @@ class buffer_overflow : public past_the_end
 {
 public:
   buffer_overflow (const region *reg, tree diag_arg,
-                   byte_range range, tree byte_bound)
+		   byte_range range, tree byte_bound)
   : past_the_end (reg, diag_arg, range, byte_bound)
   {}
 
@@ -1606,34 +1607,34 @@ public:
     switch (m_reg->get_memory_space ())
       {
       default:
-        m.add_cwe (787);
-        warned = warning_meta (rich_loc, m, get_controlling_option (),
-                             "buffer overflow");
-        break;
+	m.add_cwe (787);
+	warned = warning_meta (rich_loc, m, get_controlling_option (),
+			       "buffer overflow");
+	break;
       case MEMSPACE_STACK:
-        m.add_cwe (121);
-        warned = warning_meta (rich_loc, m, get_controlling_option (),
-                             "stack-based buffer overflow");
-        break;
+	m.add_cwe (121);
+	warned = warning_meta (rich_loc, m, get_controlling_option (),
+			       "stack-based buffer overflow");
+	break;
       case MEMSPACE_HEAP:
-        m.add_cwe (122);
-        warned = warning_meta (rich_loc, m, get_controlling_option (),
-                             "heap-based buffer overflow");
-        break;
+	m.add_cwe (122);
+	warned = warning_meta (rich_loc, m, get_controlling_option (),
+			       "heap-based buffer overflow");
+	break;
       }
 
     if (warned)
       {
-        char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
-        print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
-        if (m_diag_arg)
-          inform (rich_loc->get_loc (), "write is %s bytes past the end"
-                                        " of %qE", num_bytes_past_buf,
-                                                   m_diag_arg);
-        else
-          inform (rich_loc->get_loc (), "write is %s bytes past the end"
-                                        "of the region",
-                                        num_bytes_past_buf);
+	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
+	print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
+	if (m_diag_arg)
+	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
+					" of %qE", num_bytes_past_buf,
+						   m_diag_arg);
+	else
+	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
+					"of the region",
+					num_bytes_past_buf);
       }
 
     return warned;
@@ -1651,21 +1652,21 @@ public:
 
     if (start == end)
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds write at byte %s but %qE"
-                                     " ends at byte %E", start_buf, m_diag_arg,
-                                                         m_byte_bound);
-        return ev.formatted_print ("out-of-bounds write at byte %s but region"
-                                   " ends at byte %E", start_buf,
-                                                       m_byte_bound);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds write at byte %s but %qE"
+				     " ends at byte %E", start_buf, m_diag_arg,
+							 m_byte_bound);
+	return ev.formatted_print ("out-of-bounds write at byte %s but region"
+				   " ends at byte %E", start_buf,
+						       m_byte_bound);
       }
     else
       {
-        if (m_diag_arg)
-          return ev.formatted_print ("out-of-bounds write from byte %s till"
-                                     " byte %s but %qE ends at byte %E",
-                                     start_buf, end_buf, m_diag_arg,
-                                     m_byte_bound);
+	if (m_diag_arg)
+	  return ev.formatted_print ("out-of-bounds write from byte %s till"
+				     " byte %s but %qE ends at byte %E",
+				     start_buf, end_buf, m_diag_arg,
+	                             m_byte_bound);
         return ev.formatted_print ("out-of-bounds write from byte %s till"
                                    " byte %s but region ends at byte %E",
                                    start_buf, end_buf, m_byte_bound);
@@ -1775,7 +1776,7 @@ public:
                                      " starts at byte 0", start_buf,
                                                           m_diag_arg);
         return ev.formatted_print ("out-of-bounds write at byte %s but region"
-                                  " starts at byte 0", start_buf);
+                                   " starts at byte 0", start_buf);
       }
     else
       {
@@ -1839,7 +1840,7 @@ public:
   }
 };
 
-/* May complain when the read/written byte is out-of-bounds.  */
+/* May complain when the access on REG is out-of-bounds.  */
 
 void region_model::check_region_bounds (const region *reg,
                                         enum access_direction dir,
@@ -1850,17 +1851,17 @@ void region_model::check_region_bounds (const region *reg,
   region_offset reg_offset = reg->get_offset ();
   const region *base_reg = reg_offset.get_base_region ();
 
-  /* Prevent false-positives with from symbolic_regions.
-  
-     Because the analyzer did not see previous offsets, it might
-     think that a negative access is before the buffer.  */
+  /* Bail out on symbolic offsets or symbolic regions.
+     E.g. Because the analyzer did not see previous offsets on the latter,
+     it might think that a negative access is before the buffer.  */
   if (reg_offset.symbolic_p () || base_reg->symbolic_p ())
     return;
   byte_offset_t offset = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
   
+  /* Find out how many bytes were accessed.  */
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
   tree num_bytes_tree = num_bytes_sval->maybe_get_constant ();
-  if (!num_bytes_tree)
+  if (!num_bytes_tree || TREE_CODE (num_bytes_tree) != INTEGER_CST)
     /* If we do not know how many bytes were read/written,
        assume that at least one byte was read/written.  */
     num_bytes_tree = integer_one_node;
