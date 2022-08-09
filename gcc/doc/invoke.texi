@@ -459,6 +459,7 @@ Objective-C and Objective-C++ Dialects}.
 -Wno-analyzer-null-dereference @gol
 -Wno-analyzer-possible-null-argument @gol
 -Wno-analyzer-possible-null-dereference @gol
+-Wno-analyzer-out-of-bounds @gol
 -Wno-analyzer-shift-count-negative @gol
 -Wno-analyzer-shift-count-overflow @gol
 -Wno-analyzer-stale-setjmp-buffer @gol
@@ -9990,6 +9991,17 @@ This warning requires @option{-fanalyzer}, which enables it; use
 
 This diagnostic warns for paths through the code in which a
 value known to be NULL is dereferenced.
+
+@item -Wno-analyzer-out-of-bounds
+@opindex Wanalyzer-out-of-bounds
+@opindex Wno-analyzer-out-of-bounds
+This warning requires @option{-fanalyzer} to enable it; use
+@option{-Wno-analyzer-out-of-bounds} to disable it.
+
+This diagnostic warns for path through the code in which a buffer is
+accessed or written out-of-bounds.
+
+See @url{https://cwe.mitre.org/data/definitions/119.html, CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer}.
 
 @item -Wno-analyzer-shift-count-negative
 @opindex Wanalyzer-shift-count-negative
