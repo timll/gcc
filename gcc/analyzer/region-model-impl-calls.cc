@@ -758,9 +758,11 @@ region_model::impl_call_realloc (const call_details &cd)
 						  old_size_sval);
 	      const svalue *buffer_content_sval
 		= model->get_store_value (sized_old_reg, cd.get_ctxt ());
+              const svalue *defined_size = get_copied_size (old_size_sval,
+							    new_size_sval);
 	      const region *sized_new_reg
 		= model->m_mgr->get_sized_region (new_reg, NULL,
-						  get_copied_size (old_size_sval, new_size_sval));
+						  defined_size);
 	      model->set_value (sized_new_reg, buffer_content_sval,
 				cd.get_ctxt ());
 	    }
