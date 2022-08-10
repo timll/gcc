@@ -1607,7 +1607,10 @@ void region_model::check_region_bounds (const region *reg,
      it might think that a negative access is before the buffer).  */
   if (reg_offset.symbolic_p () || base_reg->symbolic_p ())
     return;
-  byte_offset_t offset = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+  byte_offset_t offset_unsigned
+    = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+  byte_offset_t offset
+    = offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
 
   /* Find out how many bytes were accessed.  */
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);

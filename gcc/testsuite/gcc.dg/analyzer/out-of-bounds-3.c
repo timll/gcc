@@ -61,9 +61,9 @@ void test5 (void)
 
   int sum = 0;
   for (int i = 4; i >= 0; i++)
-    sum += *(buf + i); /* { dg-line test5 } */
+    sum += *(buf - i); /* { dg-line test5 } */
 
-  /* { dg-warning "overread" "warning" { target *-*-* } test5 } */
+  /* { dg-warning "underread" "warning" { target *-*-* } test5 } */
   /* { dg-message "" "note" { target *-*-* } test5 } */
 }
 
