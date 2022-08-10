@@ -1274,7 +1274,7 @@ class out_of_bounds : public pending_diagnostic_subclass<out_of_bounds>
 {
 public:
   out_of_bounds (const region *reg, tree diag_arg,
-                 byte_range out_of_bounds_range)
+		 byte_range out_of_bounds_range)
   : m_reg (reg), m_diag_arg (diag_arg),
     m_out_of_bounds_range (out_of_bounds_range)
   {}
@@ -1376,7 +1376,7 @@ public:
       {
 	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
 	print_dec (m_out_of_bounds_range.m_size_in_bytes,
-                   num_bytes_past_buf, UNSIGNED);
+		   num_bytes_past_buf, UNSIGNED);
 	if (m_diag_arg)
 	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
 					" of %qE", num_bytes_past_buf,
@@ -1445,7 +1445,7 @@ public:
       {
 	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
 	print_dec (m_out_of_bounds_range.m_size_in_bytes,
-                   num_bytes_past_buf, UNSIGNED);
+		   num_bytes_past_buf, UNSIGNED);
 	if (m_diag_arg)
 	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
 					" of %qE", num_bytes_past_buf,
@@ -1607,8 +1607,15 @@ void region_model::check_region_bounds (const region *reg,
      it might think that a negative access is before the buffer).  */
   if (reg_offset.symbolic_p () || base_reg->symbolic_p ())
     return;
-  byte_offset_t offset_unsigned
+  byte_offset_t offset_unsigned 
     = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+  /* The constant offset from a pointer is represented internally as a sizetype
+     but should be interpreted as a signed value here.  The statement below
+     converts the offset to a signed integer with the same precision the
+     sizetype has on the target system.
+
+     For example, this is needed for out-of-bounds-3.c test1 to pass when
+     compiled with a 64-bit gcc build targeting 32-bit systems.  */
   byte_offset_t offset
     = offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
 

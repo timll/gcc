@@ -778,8 +778,7 @@ region_model::impl_call_realloc (const call_details &cd)
     }
 
   private:
-    /* Return the size svalue that represents the copied bytes from realloc,
-       i.e. the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL.
+    /* Return the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL.
        If either one is symbolic, the symbolic svalue is returned.  */
     const svalue *get_copied_size (const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
