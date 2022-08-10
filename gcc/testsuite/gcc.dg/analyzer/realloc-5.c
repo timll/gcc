@@ -1,4 +1,3 @@
-/* { dg-additional-options "-Wno-analyzer-out-of-bounds -Wno-analyzer-use-of-uninitialized-value" } */
 #include "analyzer-decls.h"
 
 typedef __SIZE_TYPE__ size_t;
@@ -33,7 +32,14 @@ void test_1 ()
       return;
     }
   else if (p != q)
-    __analyzer_eval (q[8] == 1); /* { dg-warning "UNKNOWN" } */
-  
+    {
+      __analyzer_dump_capacity (q); /* { dg-warning "capacity: '\\(\[^\n\r\]*\\)8'" } */
+      __analyzer_eval (q[8] == 1); /* { dg-line eval } */
+    
+      /* { dg-warning "UNKNOWN" "warning" { target *-*-* } eval } */
+      /* { dg-warning "overread" "warning" { target *-*-* } eval } */
+      /* { dg-warning "use of uninitialized value" "warning" { target *-*-* } eval } */
+    }
+
   free (q);
 }

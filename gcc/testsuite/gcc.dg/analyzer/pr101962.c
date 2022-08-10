@@ -23,8 +23,9 @@ test_1 (void)
   __analyzer_eval (a == NULL); /* { dg-warning "FALSE" } */
   __analyzer_eval (a != NULL); /* { dg-warning "TRUE" } */
   return *a; /* { dg-line test_1 } */
-  
-  /* { dg-warning "overread.*?use of uninitialized value '\\*a'|use of uninitialized value '\\*a'.*?overread" "warning" { target *-*-* } test_1 } */
+
+  /* { dg-warning "use of uninitialized value '\\*a'" "warning" { target *-*-* } test_1 } */
+  /* { dg-warning "overread" "warning" { target *-*-* } test_1 } */
 }
 
 static const char * __attribute__((noinline))

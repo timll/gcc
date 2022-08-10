@@ -1273,8 +1273,10 @@ region_model::on_stmt_pre (const gimple *stmt,
 class out_of_bounds : public pending_diagnostic_subclass<out_of_bounds>
 {
 public:
-  out_of_bounds (const region *reg, tree diag_arg, byte_range range)
-  : m_reg (reg), m_diag_arg (diag_arg), m_range (range)
+  out_of_bounds (const region *reg, tree diag_arg,
+                 byte_range out_of_bounds_range)
+  : m_reg (reg), m_diag_arg (diag_arg),
+    m_out_of_bounds_range (out_of_bounds_range)
   {}
 
   const char *get_kind () const final override
@@ -1285,7 +1287,7 @@ public:
   bool operator== (const out_of_bounds &other) const
   {
     return m_reg == other.m_reg
-	   && m_range == other.m_range
+	   && m_out_of_bounds_range == other.m_out_of_bounds_range
 	   && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg);
   }
 
@@ -1302,7 +1304,7 @@ public:
 protected:
   const region *m_reg;
   tree m_diag_arg;
-  byte_range m_range;
+  byte_range m_out_of_bounds_range;
 };
 
 /* Abstract subclass to complaing about out-of-bounds
@@ -1318,9 +1320,7 @@ public:
 
   bool operator== (const past_the_end &other) const
   {
-    return m_reg == other.m_reg
-	   && m_range == other.m_range
-	   && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg)
+    return out_of_bounds::operator== (other)
 	   && pending_diagnostic::same_tree_p (m_byte_bound,
 					       other.m_byte_bound);
   }
@@ -1375,7 +1375,8 @@ public:
     if (warned)
       {
 	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
-	print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
+	print_dec (m_out_of_bounds_range.m_size_in_bytes,
+                   num_bytes_past_buf, UNSIGNED);
 	if (m_diag_arg)
 	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
 					" of %qE", num_bytes_past_buf,
@@ -1392,8 +1393,8 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    byte_size_t start = m_range.get_start_byte_offset ();
-    byte_size_t end = m_range.get_last_byte_offset ();
+    byte_size_t start = m_out_of_bounds_range.get_start_byte_offset ();
+    byte_size_t end = m_out_of_bounds_range.get_last_byte_offset ();
     char start_buf[WIDE_INT_PRINT_BUFFER_SIZE];
     print_dec (start, start_buf, SIGNED);
     char end_buf[WIDE_INT_PRINT_BUFFER_SIZE];
@@ -1443,7 +1444,8 @@ public:
     if (warned)
       {
 	char num_bytes_past_buf[WIDE_INT_PRINT_BUFFER_SIZE];
-	print_dec (m_range.m_size_in_bytes, num_bytes_past_buf, UNSIGNED);
+	print_dec (m_out_of_bounds_range.m_size_in_bytes,
+                   num_bytes_past_buf, UNSIGNED);
 	if (m_diag_arg)
 	  inform (rich_loc->get_loc (), "write is %s bytes past the end"
 					" of %qE", num_bytes_past_buf,
@@ -1460,8 +1462,8 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    byte_size_t start = m_range.get_start_byte_offset ();
-    byte_size_t end = m_range.get_last_byte_offset ();
+    byte_size_t start = m_out_of_bounds_range.get_start_byte_offset ();
+    byte_size_t end = m_out_of_bounds_range.get_last_byte_offset ();
     char start_buf[WIDE_INT_PRINT_BUFFER_SIZE];
     print_dec (start, start_buf, SIGNED);
     char end_buf[WIDE_INT_PRINT_BUFFER_SIZE];
@@ -1511,8 +1513,8 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    byte_size_t start = m_range.get_start_byte_offset ();
-    byte_size_t end = m_range.get_last_byte_offset ();
+    byte_size_t start = m_out_of_bounds_range.get_start_byte_offset ();
+    byte_size_t end = m_out_of_bounds_range.get_last_byte_offset ();
     char start_buf[WIDE_INT_PRINT_BUFFER_SIZE];
     print_dec (start, start_buf, SIGNED);
     char end_buf[WIDE_INT_PRINT_BUFFER_SIZE];
@@ -1560,8 +1562,8 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev)
   final override
   {
-    byte_size_t start = m_range.get_start_byte_offset ();
-    byte_size_t end = m_range.get_last_byte_offset ();
+    byte_size_t start = m_out_of_bounds_range.get_start_byte_offset ();
+    byte_size_t end = m_out_of_bounds_range.get_last_byte_offset ();
     char start_buf[WIDE_INT_PRINT_BUFFER_SIZE];
     print_dec (start, start_buf, SIGNED);
     char end_buf[WIDE_INT_PRINT_BUFFER_SIZE];
