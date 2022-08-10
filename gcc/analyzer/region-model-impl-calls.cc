@@ -732,17 +732,17 @@ region_model::impl_call_realloc (const call_details &cd)
 	  const svalue *old_size_sval = model->get_dynamic_extents (freed_reg);
 	  if (old_size_sval)
 	    {
-	      const region *sized_old_reg
-		= model->m_mgr->get_sized_region (freed_reg, NULL,
-						  old_size_sval);
-	      const svalue *buffer_content_sval
-		= model->get_store_value (sized_old_reg, cd.get_ctxt ());
 	      const svalue *copied_size_sval
 		= get_copied_size (old_size_sval, new_size_sval);
-	      const region *sized_new_reg
+	      const region *copied_old_reg
+		= model->m_mgr->get_sized_region (freed_reg, NULL,
+						  copied_size_sval);
+	      const svalue *buffer_content_sval
+		= model->get_store_value (copied_old_reg, cd.get_ctxt ());
+	      const region *copied_new_reg
 		= model->m_mgr->get_sized_region (new_reg, NULL,
 						  copied_size_sval);
-	      model->set_value (sized_new_reg, buffer_content_sval,
+	      model->set_value (copied_new_reg, buffer_content_sval,
 				cd.get_ctxt ());
 	    }
 	  else
@@ -778,7 +778,9 @@ region_model::impl_call_realloc (const call_details &cd)
     }
 
   private:
-    /* Return the size svalue for the new region allocated by realloc.  */
+    /* Return the size svalue that represents the copied bytes from realloc,
+       i.e. the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL.
+       If either one is symbolic, the symbolic svalue is returned.  */
     const svalue *get_copied_size (const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
