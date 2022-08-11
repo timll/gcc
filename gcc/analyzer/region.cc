@@ -1459,7 +1459,7 @@ offset_region::get_byte_size_sval (region_model_manager *mgr) const
 	}
     }
 
-  return mgr->get_or_create_unknown_svalue (size_type_node);
+  return region::get_byte_size_sval (mgr);
 }
 
 /* class sized_region : public region.  */
