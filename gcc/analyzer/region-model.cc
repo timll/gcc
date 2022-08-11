@@ -3235,6 +3235,9 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     }
 }
 
+/* Abstract class for diagnostics related touse of floating point
+   arithmetic where precision is needed.  */
+
 class imprecise_floating_point_arithmetic
 : public pending_diagnostic_subclass<imprecise_floating_point_arithmetic>
 {
@@ -3256,24 +3259,19 @@ public:
   {
     return OPT_Wanalyzer_allocation_size;
   }
-
-  bool emit (rich_location *rich_loc) override
-  {
-    diagnostic_metadata m;
-    return warning_meta (rich_loc, m, get_controlling_option (),
-                         "use of floating-point arithmetic is imprecise but"
-                         " precision is needed here");
-  }
 };
+
+/* Concrete diagnostic to complain about uses of floating point arithmetic
+   in the size argument of malloc etc.  */
 
 class float_as_size_arg : public imprecise_floating_point_arithmetic
 {
 public:
-  float_as_size_arg (tree val) : m_val (val) {}
+  float_as_size_arg (tree arg) : m_arg (arg) {}
 
   bool operator== (const float_as_size_arg &other) const
   {
-    return pending_diagnostic::same_tree_p(m_val, other.m_val);
+    return pending_diagnostic::same_tree_p(m_arg, other.m_arg);
   }
 
   bool emit (rich_location *rich_loc) final override
@@ -3287,67 +3285,81 @@ public:
   label_text describe_final_event (const evdesc::final_event &ev) final
   override
   {
-    return ev.formatted_print ("operand %qE is of type %qT", 
-                               m_val, TREE_TYPE (m_val));
+    if (m_arg)
+      return ev.formatted_print ("at least one operand of %qE is of a floating"
+                                 " point type", m_arg);
+    return ev.formatted_print ("at least one operand is of a floating point"
+                               " type");
   }
 
 private:
-  tree m_val;
+  tree m_arg;
 };
+
+/* Visitor to find uses of floating point variables/constants in an svalue.  */
 
 class contains_floating_point_visitor : public visitor
 {
 public:
-  contains_floating_point_visitor (const svalue *root_sval) : m_sval (NULL)
+  contains_floating_point_visitor (const svalue *root_sval) : m_result (false)
   {
     root_sval->accept (this);
   }
 
-  const svalue * get_result ()
+  bool has_floats ()
   {
-    return m_sval;
+    return m_result;
   }
 
   void visit_constant_svalue (const constant_svalue *sval) final override
   {
-    if (TREE_CODE (sval->get_constant ()) == REAL_CST)
-      {
-        /* Prefer to use non-constants for diagnostics.  */
-        if (!m_sval)
-          m_sval = sval;
-      }
+    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
   }
 
   void visit_conjured_svalue (const conjured_svalue *sval) final override
   {
-    if (TREE_CODE (sval->get_type ()) == REAL_TYPE)
-      m_sval = sval;
+    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
   }
 
   void visit_initial_svalue (const initial_svalue *sval) final override
   {
-    if (TREE_CODE (sval->get_type ()) == REAL_TYPE)
-      m_sval = sval;
+    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
+  }
+
+  void visit_unaryop_svalue (const unaryop_svalue *sval) final override
+  {
+    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
+  }
+  
+  void visit_binop_svalue (const binop_svalue *sval) final override 
+  {
+    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
   }
 
 private:
-  const svalue *m_sval;
+  /* Holds the svalue we want to warn for.  */
+  bool m_result;
 };
+
+/* May complain about uses of floating point
+   operands in the capacity of SVAL.  */
 
 void
 region_model::check_region_capacity_for_floats (const svalue *sval,
                                                 region_model_context *ctxt)
 const
 {
+  if (!ctxt)
+    return;
+
   if (const region_svalue *reg_sval = dyn_cast <const region_svalue *> (sval))
     {
       const svalue *capacity = get_capacity (reg_sval->get_pointee ());
-
       contains_floating_point_visitor v (capacity);
-      if (v.get_result ())
+      if (v.has_floats ())
         {
-          tree val = get_representative_tree (v.get_result ());
-          ctxt->warn (new float_as_size_arg (val));
+          tree diag_arg = get_representative_tree (capacity);
+          ctxt->warn (new float_as_size_arg (diag_arg));
         }
     }
 }

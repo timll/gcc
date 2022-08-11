@@ -118,20 +118,10 @@ void test_10 (int32_t n)
 
 void test_11 ()
 {
+  /* 3.0 is converted to an int before the analyzer runs.  */
   int32_t *ptr = malloc (3.0); /* { dg-line malloc11 } */
   free (ptr);
 
   /* { dg-warning "allocated buffer size is not a multiple of the pointee's size \\\[CWE-131\\\]" "warning" { target *-*-* } malloc11 } */
   /* { dg-message "'int32_t \\*' (\\\{aka '(long )?int \\*'\\\})? here; 'sizeof \\(int32_t (\\\{aka (long )?int\\\})?\\)' is '4'" "note" { target *-*-* } malloc11 } */
-}
-
-void test_12 (int i)
-{
-  float f;
-  if (i == 0)
-    f = 4.0;
-  else
-    f = 4.5;
-  int32_t *ptr = malloc (f); /* { dg-message "operand '\[0-9efd\\.\\+\]*?' is of type 'float'" } */
-  free (ptr);
 }
