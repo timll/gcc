@@ -3620,7 +3620,7 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 	const constant_svalue *cst_cap_sval
 	  = as_a <const constant_svalue *> (capacity);
 	tree cst_cap = cst_cap_sval->get_constant ();
-	if (TREE_CODE (cst_cap) == INTEGER_CST 
+	if (TREE_CODE (cst_cap) == INTEGER_CST
 	    && !capacity_compatible_with_type (cst_cap, pointee_size_tree,
 					       is_struct))
 	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
@@ -3666,7 +3666,7 @@ public:
 
   int get_controlling_option () const final override
   {
-    return OPT_Wanalyzer_allocation_size;
+    return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
   }
 };
 
@@ -3680,15 +3680,21 @@ public:
 
   bool operator== (const float_as_size_arg &other) const
   {
-    return pending_diagnostic::same_tree_p(m_arg, other.m_arg);
+    return pending_diagnostic::same_tree_p (m_arg, other.m_arg);
   }
 
   bool emit (rich_location *rich_loc) final override
   {
     diagnostic_metadata m;
-    return warning_meta (rich_loc, m, get_controlling_option (),
-			 "use of floating point arithmetic inside the"
-			 " size argument is dangerous");
+    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
+                                "use of floating point arithmetic inside the"
+                                " size argument might yield unexpected"
+                                " results");
+    if (warned)
+      inform (rich_loc->get_loc (), "only use operands of a type that"
+                                    " represents whole numbers inside the"
+                                    " size argument");
+    return warned;
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final
@@ -3735,18 +3741,8 @@ public:
     m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
   }
 
-  void visit_unaryop_svalue (const unaryop_svalue *sval) final override
-  {
-    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
-  }
-  
-  void visit_binop_svalue (const binop_svalue *sval) final override 
-  {
-    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
-  }
-
 private:
-  /* Holds the svalue we want to warn for.  */
+  /* True if at least one floating point operand was found.  */
   bool m_result;
 };
 

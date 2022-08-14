@@ -154,19 +154,3 @@ void test_13 (void)
   else
     free (ptr);
 }
-
-void test_14 (float n)
-{
-  int32_t *ptr = malloc (sizeof (int32_t) * n); /* { dg-line malloc14 } */
-  free (ptr);
-
-  /* { dg-message "operand 'n' is of type 'float'" "note" { target *-*-* } malloc14 } */
-}
-
-void test_15 (int32_t n)
-{
-  int32_t *ptr = malloc (n * 3.1); /* { dg-line malloc15 } */
-  free (ptr);
-
-  /* { dg-message "operand '\[0-9efd\\.\\+\]*?' is of type 'double'" "note" { target *-*-* } malloc15 } */
-}

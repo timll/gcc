@@ -118,7 +118,7 @@ void test_10 (int32_t n)
 
 void test_11 ()
 {
-  /* 3.0 is converted to an int before the analyzer runs.  */
+  /* 3.0 is folded to an int before the analyzer runs.  */
   int32_t *ptr = malloc (3.0); /* { dg-line malloc11 } */
   free (ptr);
 
