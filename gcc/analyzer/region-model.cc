@@ -3303,8 +3303,8 @@ public:
     m.add_cwe (131);
 
     return warning_meta (rich_loc, m, get_controlling_option (),
-                         "allocated buffer size is not a multiple"
-                         " of the pointee's size");
+			 "allocated buffer size is not a multiple"
+			 " of the pointee's size");
   }
 
   label_text
@@ -3371,7 +3371,7 @@ private:
 
 static bool
 capacity_compatible_with_type (tree cst, tree pointee_size_tree,
-                               bool is_struct)
+			       bool is_struct)
 {
   gcc_assert (TREE_CODE (cst) == INTEGER_CST);
   gcc_assert (TREE_CODE (pointee_size_tree) == INTEGER_CST);
@@ -3480,10 +3480,10 @@ public:
     equiv_class_id id (-1);
     if (m_cm->get_equiv_class_by_svalue (sval, &id))
       {
-        if (tree cst = id.get_obj (*m_cm).get_any_constant ())
-          check_constant (cst, sval);
-        else
-          result_set.add (sval);
+	if (tree cst = id.get_obj (*m_cm).get_any_constant ())
+	  check_constant (cst, sval);
+	else
+	  result_set.add (sval);
       }
   }
 
@@ -3505,13 +3505,13 @@ private:
     switch (TREE_CODE (cst))
       {
       default:
-        /* Assume all unhandled operands are compatible.  */
-        result_set.add (sval);
-        break;
+	/* Assume all unhandled operands are compatible.  */
+	result_set.add (sval);
+	break;
       case INTEGER_CST:
-        if (capacity_compatible_with_type (cst, m_size_cst))
-          result_set.add (sval);
-        break;
+	if (capacity_compatible_with_type (cst, m_size_cst))
+	  result_set.add (sval);
+	break;
       }
   }
 
@@ -3617,14 +3617,14 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     {
     case svalue_kind::SK_CONSTANT:
       {
-        const constant_svalue *cst_cap_sval
-          = as_a <const constant_svalue *> (capacity);
-        tree cst_cap = cst_cap_sval->get_constant ();
-        if (TREE_CODE (cst_cap) == INTEGER_CST 
-            && !capacity_compatible_with_type (cst_cap, pointee_size_tree,
-                                               is_struct))
-          ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
-                                                   cst_cap));
+	const constant_svalue *cst_cap_sval
+	  = as_a <const constant_svalue *> (capacity);
+	tree cst_cap = cst_cap_sval->get_constant ();
+	if (TREE_CODE (cst_cap) == INTEGER_CST 
+	    && !capacity_compatible_with_type (cst_cap, pointee_size_tree,
+					       is_struct))
+	  ctxt->warn (new dubious_allocation_size (lhs_reg, rhs_reg,
+						   cst_cap));
       }
       break;
     default:
@@ -3659,7 +3659,7 @@ public:
   }
 
   bool operator== (const imprecise_floating_point_arithmetic &other
-                   ATTRIBUTE_UNUSED) const
+		   ATTRIBUTE_UNUSED) const
   {
     return true;
   }
@@ -3687,8 +3687,8 @@ public:
   {
     diagnostic_metadata m;
     return warning_meta (rich_loc, m, get_controlling_option (),
-                         "use of floating point arithmetic inside the"
-                         " size argument is dangerous");
+			 "use of floating point arithmetic inside the"
+			 " size argument is dangerous");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final
@@ -3696,9 +3696,9 @@ public:
   {
     if (m_arg)
       return ev.formatted_print ("at least one operand of %qE is of a floating"
-                                 " point type", m_arg);
+				 " point type", m_arg);
     return ev.formatted_print ("at least one operand is of a floating point"
-                               " type");
+			       " type");
   }
 
 private:
@@ -3755,7 +3755,7 @@ private:
 
 void
 region_model::check_region_capacity_for_floats (const svalue *sval,
-                                                region_model_context *ctxt)
+						region_model_context *ctxt)
 const
 {
   if (!ctxt)
@@ -3766,10 +3766,10 @@ const
       const svalue *capacity = get_capacity (reg_sval->get_pointee ());
       contains_floating_point_visitor v (capacity);
       if (v.has_floats ())
-        {
-          tree diag_arg = get_representative_tree (capacity);
-          ctxt->warn (new float_as_size_arg (diag_arg));
-        }
+	{
+	  tree diag_arg = get_representative_tree (capacity);
+	  ctxt->warn (new float_as_size_arg (diag_arg));
+	}
     }
 }
 
