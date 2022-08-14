@@ -11,7 +11,7 @@ void test_1 (float n)
   free (ptr);
 
   /* { dg-warning "use of floating point arithmetic inside the size argument might yield unexpected results" "warning" { target *-*-* } test_1 } */
-  /* { dg-message "at least one operand of" "note" { target *-*-* } test_1 } */
+  /* { dg-message "operand 'n' is of type 'float'" "note" { target *-*-* } test_1 } */
   /* { dg-message "only use operands of a type that represents whole numbers inside the size argument" "note" { target *-*-* } test_1 } */
 }
 
@@ -21,7 +21,7 @@ void test_2 (int n)
   free (ptr);
 
   /* { dg-warning "use of floating point arithmetic inside the size argument might yield unexpected results" "warning" { target *-*-* } test_2 } */
-  /* { dg-message "at least one operand of" "note" { target *-*-* } test_2 } */
+  /* { dg-message "operand '\(\\d|e|f|\\.|\\+|\)+' is of type 'double'" "note" { target *-*-* } test_2 } */
   /* { dg-message "only use operands of a type that represents whole numbers inside the size argument" "note" { target *-*-* } test_2 } */
 }
 
@@ -30,7 +30,7 @@ void *alloc_me (size_t size)
   return malloc (size); /* { dg-line test_3 } */
 
   /* { dg-warning "use of floating point arithmetic inside the size argument might yield unexpected results" "warning" { target *-*-* } test_3 } */
-  /* { dg-message "at least one operand of" "note" { target *-*-* } test_3 } */
+  /* { dg-message "operand 'f' is of type 'float'" "note" { target *-*-* } test_3 } */
   /* { dg-message "only use operands of a type that represents whole numbers inside the size argument" "note" { target *-*-* } test_3 } */
 }
 
@@ -46,7 +46,7 @@ void test_4 (int n)
   free (ptr);
 
   /* { dg-warning "use of floating point arithmetic inside the size argument might yield unexpected results" "warning" { target *-*-* } test_4 } */
-  /* { dg-message "at least one operand of" "note" { target *-*-* } test_4 } */
+  /* { dg-message "operand '\(\\d|e|f|\\.|\\+|\)+' is of type 'double'" "note" { target *-*-* } test_4 } */
   /* { dg-message "only use operands of a type that represents whole numbers inside the size argument" "note" { target *-*-* } test_4 } */
 }
 
@@ -57,6 +57,6 @@ int test_5 (float f)
   return *ptr;
 
   /* { dg-warning "use of floating point arithmetic inside the size argument might yield unexpected results" "warning" { target *-*-* } test_5 } */
-  /* { dg-message "at least one operand of" "note" { target *-*-* } test_5 } */
+  /* { dg-message "operand 'f' is of type 'float'" "note" { target *-*-* } test_5 } */
   /* { dg-message "only use operands of a type that represents whole numbers inside the size argument" "note" { target *-*-* } test_5 } */
 }

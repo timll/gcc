@@ -3687,13 +3687,13 @@ public:
   {
     diagnostic_metadata m;
     bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-                                "use of floating point arithmetic inside the"
-                                " size argument might yield unexpected"
-                                " results");
+				"use of floating point arithmetic inside the"
+				" size argument might yield unexpected"
+				" results");
     if (warned)
       inform (rich_loc->get_loc (), "only use operands of a type that"
-                                    " represents whole numbers inside the"
-                                    " size argument");
+				    " represents whole numbers inside the"
+				    " size argument");
     return warned;
   }
 
@@ -3701,10 +3701,10 @@ public:
   override
   {
     if (m_arg)
-      return ev.formatted_print ("at least one operand of %qE is of a floating"
-				 " point type", m_arg);
-    return ev.formatted_print ("at least one operand is of a floating point"
-			       " type");
+      return ev.formatted_print ("operand %qE is of type %qT",
+                                 m_arg, TREE_TYPE (m_arg));
+    return ev.formatted_print ("at least one operand of the size argument is"
+                               " of a floating point type");
   }
 
 private:
@@ -3716,34 +3716,39 @@ private:
 class contains_floating_point_visitor : public visitor
 {
 public:
-  contains_floating_point_visitor (const svalue *root_sval) : m_result (false)
+  contains_floating_point_visitor (const svalue *root_sval) : m_result (NULL)
   {
     root_sval->accept (this);
   }
 
-  bool has_floats ()
+  const svalue *get_svalue_to_report ()
   {
     return m_result;
   }
 
   void visit_constant_svalue (const constant_svalue *sval) final override
   {
-    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
+    /* We prefer to report non-constants, because at the point the analyzer
+       runs, constants in the expression are already converted to floats.  */
+    if (SCALAR_FLOAT_TYPE_P (sval->get_type ()) && !m_result)
+      m_result = sval;
   }
 
   void visit_conjured_svalue (const conjured_svalue *sval) final override
   {
-    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
+    if (SCALAR_FLOAT_TYPE_P (sval->get_type ()))
+      m_result = sval; 
   }
 
   void visit_initial_svalue (const initial_svalue *sval) final override
   {
-    m_result |= SCALAR_FLOAT_TYPE_P (sval->get_type ());
+    if (SCALAR_FLOAT_TYPE_P (sval->get_type ()))
+      m_result = sval; 
   }
 
 private:
-  /* True if at least one floating point operand was found.  */
-  bool m_result;
+  /* Non-null if at least one floating point operand was found.  */
+  const svalue *m_result;
 };
 
 /* May complain about uses of floating point
@@ -3761,9 +3766,9 @@ const
     {
       const svalue *capacity = get_capacity (reg_sval->get_pointee ());
       contains_floating_point_visitor v (capacity);
-      if (v.has_floats ())
+      if (const svalue *float_sval = v.get_svalue_to_report ())
 	{
-	  tree diag_arg = get_representative_tree (capacity);
+	  tree diag_arg = get_representative_tree (float_sval);
 	  ctxt->warn (new float_as_size_arg (diag_arg));
 	}
     }
