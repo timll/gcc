@@ -3663,6 +3663,11 @@ public:
   {
     return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
   }
+
+  bool operator== (const imprecise_floating_point_arithmetic &other) const
+  {
+    return true;
+  }
 };
 
 /* Concrete diagnostic to complain about uses of floating point arithmetic
