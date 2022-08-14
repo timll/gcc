@@ -3702,9 +3702,9 @@ public:
   {
     if (m_arg)
       return ev.formatted_print ("operand %qE is of type %qT",
-                                 m_arg, TREE_TYPE (m_arg));
+				 m_arg, TREE_TYPE (m_arg));
     return ev.formatted_print ("at least one operand of the size argument is"
-                               " of a floating point type");
+			       " of a floating point type");
   }
 
 private:
@@ -3728,8 +3728,10 @@ public:
 
   void visit_constant_svalue (const constant_svalue *sval) final override
   {
-    /* We prefer to report non-constants, because at the point the analyzer
-       runs, constants in the expression are already converted to floats.  */
+    /* At the point the analyzer runs, constant integer operands in a floating
+       point expression are already implictly converted to floating points.
+       Thus, we do prefer to report non-constants such that the diagnostic
+       always reports a floating point operand.  */
     if (SCALAR_FLOAT_TYPE_P (sval->get_type ()) && !m_result)
       m_result = sval;
   }
@@ -3751,8 +3753,9 @@ private:
   const svalue *m_result;
 };
 
-/* May complain about uses of floating point
-   operands in the capacity of SVAL.  */
+/* May complain about uses of floating point operands in the capacity of SVAL.
+
+   SVAL is expected to be a region_svalue.  */
 
 void
 region_model::check_region_capacity_for_floats (const svalue *sval,
