@@ -3651,7 +3651,8 @@ class imprecise_floating_point_arithmetic
 : public pending_diagnostic_subclass<imprecise_floating_point_arithmetic>
 {
 public:
-  imprecise_floating_point_arithmetic () {}
+  imprecise_floating_point_arithmetic ()
+  {}
 
   const char *get_kind () const final override
   {
@@ -3676,7 +3677,8 @@ public:
 class float_as_size_arg : public imprecise_floating_point_arithmetic
 {
 public:
-  float_as_size_arg (tree arg) : m_arg (arg) {}
+  float_as_size_arg (tree arg) : m_arg (arg)
+  {}
 
   bool operator== (const float_as_size_arg &other) const
   {
@@ -3739,13 +3741,13 @@ public:
   void visit_conjured_svalue (const conjured_svalue *sval) final override
   {
     if (SCALAR_FLOAT_TYPE_P (sval->get_type ()))
-      m_result = sval; 
+      m_result = sval;
   }
 
   void visit_initial_svalue (const initial_svalue *sval) final override
   {
     if (SCALAR_FLOAT_TYPE_P (sval->get_type ()))
-      m_result = sval; 
+      m_result = sval;
   }
 
 private:

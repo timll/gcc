@@ -9956,7 +9956,7 @@ This warning requires @option{-fanalyzer}, which enables it; use
 to disable it.
 
 This diagnostic warns for paths through the code in which floating point
-arithmetic is used in locations where precise computation is needed. This
+arithmetic is used in locations where precise computation is needed.  This
 diagnostic only warns on use of floating points operands inside the
 allocation size at the moment.
 

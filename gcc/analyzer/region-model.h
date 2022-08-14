@@ -870,7 +870,7 @@ class region_model
   void check_region_size (const region *lhs_reg, const svalue *rhs_sval,
 			  region_model_context *ctxt) const;
   void check_region_capacity_for_floats (const svalue *reg_sval,
-                                         region_model_context *ctxt) const;
+					 region_model_context *ctxt) const;
   void check_region_bounds (const region *reg, enum access_direction dir,
 			    region_model_context *ctxt) const;
 
