@@ -3664,7 +3664,9 @@ public:
     return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
   }
 
-  bool operator== (const imprecise_floating_point_arithmetic &other) const
+  bool
+  operator== (const imprecise_floating_point_arithmetic &other
+              ATTRIBUTE_UNUSED) const
   {
     return true;
   }
