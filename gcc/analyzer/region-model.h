@@ -733,6 +733,7 @@ class region_model
 					  region_model_context *ctxt);
 
   tree get_representative_tree (const svalue *sval) const;
+  tree get_representative_tree (const region *reg) const;
   path_var
   get_representative_path_var (const svalue *sval,
 			       svalue_set *visited) const;
@@ -870,6 +871,8 @@ class region_model
 			  region_model_context *ctxt) const;
   void check_region_capacity_for_floats (const svalue *reg_sval,
                                          region_model_context *ctxt) const;
+  void check_region_bounds (const region *reg, enum access_direction dir,
+			    region_model_context *ctxt) const;
 
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
