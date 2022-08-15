@@ -3666,7 +3666,7 @@ public:
 
   bool
   operator== (const imprecise_floating_point_arithmetic &other
-              ATTRIBUTE_UNUSED) const
+	      ATTRIBUTE_UNUSED) const
   {
     return true;
   }
