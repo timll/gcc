@@ -3644,145 +3644,6 @@ region_model::check_region_size (const region *lhs_reg, const svalue *rhs_sval,
     }
 }
 
-/* Abstract class for diagnostics related touse of floating point
-   arithmetic where precision is needed.  */
-
-class imprecise_floating_point_arithmetic
-: public pending_diagnostic_subclass<imprecise_floating_point_arithmetic>
-{
-public:
-  imprecise_floating_point_arithmetic ()
-  {}
-
-  const char *get_kind () const final override
-  {
-    return "imprecise_floating_point_arithmetic";
-  }
-
-  int get_controlling_option () const final override
-  {
-    return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
-  }
-
-  bool
-  operator== (const imprecise_floating_point_arithmetic &other
-              ATTRIBUTE_UNUSED) const
-  {
-    return true;
-  }
-};
-
-/* Concrete diagnostic to complain about uses of floating point arithmetic
-   in the size argument of malloc etc.  */
-
-class float_as_size_arg : public imprecise_floating_point_arithmetic
-{
-public:
-  float_as_size_arg (tree arg) : m_arg (arg)
-  {}
-
-  bool operator== (const float_as_size_arg &other) const
-  {
-    return pending_diagnostic::same_tree_p (m_arg, other.m_arg);
-  }
-
-  bool emit (rich_location *rich_loc) final override
-  {
-    diagnostic_metadata m;
-    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-				"use of floating point arithmetic inside the"
-				" size argument might yield unexpected"
-				" results");
-    if (warned)
-      inform (rich_loc->get_loc (), "only use operands of a type that"
-				    " represents whole numbers inside the"
-				    " size argument");
-    return warned;
-  }
-
-  label_text describe_final_event (const evdesc::final_event &ev) final
-  override
-  {
-    if (m_arg)
-      return ev.formatted_print ("operand %qE is of type %qT",
-				 m_arg, TREE_TYPE (m_arg));
-    return ev.formatted_print ("at least one operand of the size argument is"
-			       " of a floating point type");
-  }
-
-private:
-  tree m_arg;
-};
-
-/* Visitor to find uses of floating point variables/constants in an svalue.  */
-
-class contains_floating_point_visitor : public visitor
-{
-public:
-  contains_floating_point_visitor (const svalue *root_sval) : m_result (NULL)
-  {
-    root_sval->accept (this);
-  }
-
-  const svalue *get_svalue_to_report ()
-  {
-    return m_result;
-  }
-
-  void visit_constant_svalue (const constant_svalue *sval) final override
-  {
-    /* At the point the analyzer runs, constant integer operands in a floating
-       point expression are already implictly converted to floating points.
-       Thus, we do prefer to report non-constants such that the diagnostic
-       always reports a floating point operand.  */
-    tree type = sval->get_type ();
-    if (type && FLOAT_TYPE_P (type) && !m_result)
-      m_result = sval;
-  }
-
-  void visit_conjured_svalue (const conjured_svalue *sval) final override
-  {
-    tree type = sval->get_type ();
-    if (type && SCALAR_FLOAT_TYPE_P (type))
-      m_result = sval;
-  }
-
-  void visit_initial_svalue (const initial_svalue *sval) final override
-  {
-    tree type = sval->get_type ();
-    if (type && SCALAR_FLOAT_TYPE_P (type))
-      m_result = sval;
-  }
-
-private:
-  /* Non-null if at least one floating point operand was found.  */
-  const svalue *m_result;
-};
-
-/* May complain about uses of floating point operands in the capacity of SVAL.
-
-   SVAL is expected to be a region_svalue.  */
-
-void
-region_model::check_region_capacity_for_floats (const svalue *sval,
-						region_model_context *ctxt)
-const
-{
-  if (!ctxt)
-    return;
-
-  if (const region_svalue *reg_sval = dyn_cast <const region_svalue *> (sval))
-    {
-      const svalue *capacity = get_capacity (reg_sval->get_pointee ());
-      contains_floating_point_visitor v (capacity);
-      if (const svalue *float_sval = v.get_svalue_to_report ())
-	{
-	  tree diag_arg = get_representative_tree (float_sval);
-	  ctxt->warn (new float_as_size_arg (diag_arg));
-	}
-    }
-}
-
 /* Set the value of the region given by LHS_REG to the value given
    by RHS_SVAL.
    Use CTXT to report any warnings associated with writing to LHS_REG.  */
@@ -5207,6 +5068,121 @@ region_model::append_regions_cb (const region *base_reg,
     cb_data->out->safe_push (decl_reg);
 }
 
+
+/* Abstract class for diagnostics related to the use of
+   floating-point arithmetic where precision is needed.  */
+
+class imprecise_floating_point_arithmetic
+: public pending_diagnostic_subclass<imprecise_floating_point_arithmetic>
+{
+public:
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
+  }
+};
+
+/* Concrete diagnostic to complain about uses of floating-point arithmetic
+   in the size argument of malloc etc.  */
+
+class float_as_size_arg : public imprecise_floating_point_arithmetic
+{
+public:
+  float_as_size_arg (tree arg) : m_arg (arg)
+  {}
+
+  bool operator== (const float_as_size_arg &other) const
+  {
+    return pending_diagnostic::same_tree_p (m_arg, other.m_arg);
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
+                                "use of floating-point arithmetic here might"
+                                " yield unexpected results");
+    if (warned)
+      inform (rich_loc->get_loc (), "only use operands of an integer type"
+                                    " inside the size argument");
+    return warned;
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final
+  override
+  {
+    if (m_arg)
+      return ev.formatted_print ("operand %qE is of type %qT",
+                                 m_arg, TREE_TYPE (m_arg));
+    return ev.formatted_print ("at least one operand of the size argument is"
+                               " of a floating-point type");
+  }
+
+private:
+  tree m_arg;
+};
+
+/* Visitor to find uses of floating-point variables/constants in an svalue.  */
+
+class contains_floating_point_visitor : public visitor
+{
+public:
+  contains_floating_point_visitor (const svalue *root_sval) : m_result (NULL)
+  {
+    root_sval->accept (this);
+  }
+
+  const svalue *get_svalue_to_report ()
+  {
+    return m_result;
+  }
+
+  void visit_constant_svalue (const constant_svalue *sval) final override
+  {
+    /* At the point the analyzer runs, constant integer operands in a floating
+       point expression are already implictly converted to floating-points.
+       Thus, we do prefer to report non-constants such that the diagnostic
+       always reports a floating-point operand.  */
+    tree type = sval->get_type ();
+    if (type && FLOAT_TYPE_P (type) && !m_result)
+      m_result = sval;
+  }
+
+  void visit_conjured_svalue (const conjured_svalue *sval) final override
+  {
+    tree type = sval->get_type ();
+    if (type && SCALAR_FLOAT_TYPE_P (type))
+      m_result = sval;
+  }
+
+  void visit_initial_svalue (const initial_svalue *sval) final override
+  {
+    tree type = sval->get_type ();
+    if (type && SCALAR_FLOAT_TYPE_P (type))
+      m_result = sval;
+  }
+
+private:
+  /* Non-null if at least one floating-point operand was found.  */
+  const svalue *m_result;
+};
+
+/* May complain about uses of floating-point operands in SIZE_IN_BYTES.  */
+
+void
+region_model::check_dynamic_size_for_floats (const svalue *size_in_bytes,
+                                             region_model_context *ctxt) const
+{
+  gcc_assert (ctxt);
+
+  contains_floating_point_visitor v (size_in_bytes);
+  if (const svalue *float_sval = v.get_svalue_to_report ())
+	{
+	  tree diag_arg = get_representative_tree (float_sval);
+	  ctxt->warn (new float_as_size_arg (diag_arg));
+	}
+}
+
 /* Return a new region describing a heap-allocated block of memory.
    Use CTXT to complain about tainted sizes.  */
 
@@ -5244,8 +5220,11 @@ region_model::set_dynamic_extents (const region *reg,
 {
   assert_compat_types (size_in_bytes->get_type (), size_type_node);
   if (ctxt)
-    check_dynamic_size_for_taint (reg->get_memory_space (), size_in_bytes,
-				  ctxt);
+    {
+      check_dynamic_size_for_taint (reg->get_memory_space (), size_in_bytes,
+                                    ctxt);
+      check_dynamic_size_for_floats (size_in_bytes, cd.get_ctxt ());
+    }
   m_dynamic_extents.put (reg, size_in_bytes);
 }
 

@@ -237,7 +237,6 @@ region_model::impl_call_alloca (const call_details &cd)
   const region *new_reg = create_region_for_alloca (size_sval, cd.get_ctxt ());
   const svalue *ptr_sval
     = m_mgr->get_ptr_svalue (cd.get_lhs_type (), new_reg);
-  check_region_capacity_for_floats (ptr_sval, cd.get_ctxt ());
   cd.maybe_set_lhs (ptr_sval);
 }
 
@@ -394,7 +393,6 @@ region_model::impl_call_calloc (const call_details &cd)
     {
       const svalue *ptr_sval
 	= m_mgr->get_ptr_svalue (cd.get_lhs_type (), new_reg);
-      check_region_capacity_for_floats (ptr_sval, cd.get_ctxt ());
       cd.maybe_set_lhs (ptr_sval);
     }
 }
@@ -499,7 +497,6 @@ region_model::impl_call_malloc (const call_details &cd)
     {
       const svalue *ptr_sval
 	= m_mgr->get_ptr_svalue (cd.get_lhs_type (), new_reg);
-      check_region_capacity_for_floats (ptr_sval, cd.get_ctxt ());
       cd.maybe_set_lhs (ptr_sval);
     }
 }
