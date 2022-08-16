@@ -9955,9 +9955,9 @@ This warning requires @option{-fanalyzer}, which enables it; use
 @option{-Wno-analyzer-imprecise-fp-arithmetic}
 to disable it.
 
-This diagnostic warns for paths through the code in which floating point
+This diagnostic warns for paths through the code in which floating-point
 arithmetic is used in locations where precise computation is needed.  This
-diagnostic only warns on use of floating points operands inside the
+diagnostic only warns on use of floating-point operands inside the
 calculation of an allocation size at the moment.
 
 @item -Wno-analyzer-jump-through-null

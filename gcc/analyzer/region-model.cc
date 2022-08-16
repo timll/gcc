@@ -5072,13 +5072,12 @@ region_model::append_regions_cb (const region *base_reg,
 /* Abstract class for diagnostics related to the use of
    floating-point arithmetic where precision is needed.  */
 
-class imprecise_floating_point_arithmetic
-: public pending_diagnostic_subclass<imprecise_floating_point_arithmetic>
+class imprecise_floating_point_arithmetic : public pending_diagnostic
 {
 public:
   int get_controlling_option () const final override
   {
-    return OPT_Wanalyzer_imprecise_floating_point_arithmetic;
+    return OPT_Wanalyzer_imprecise_fp_arithmetic;
   }
 };
 
@@ -5091,20 +5090,25 @@ public:
   float_as_size_arg (tree arg) : m_arg (arg)
   {}
 
-  bool operator== (const float_as_size_arg &other) const
+  const char *get_kind () const final override
   {
-    return pending_diagnostic::same_tree_p (m_arg, other.m_arg);
+    return "float_as_size_arg_diagnostic";
+  }
+
+  bool subclass_equal_p (const pending_diagnostic &other) const
+  {
+    return same_tree_p (m_arg, ((const float_as_size_arg &) other).m_arg);
   }
 
   bool emit (rich_location *rich_loc) final override
   {
     diagnostic_metadata m;
     bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-                                "use of floating-point arithmetic here might"
-                                " yield unexpected results");
+				"use of floating-point arithmetic here might"
+				" yield unexpected results");
     if (warned)
       inform (rich_loc->get_loc (), "only use operands of an integer type"
-                                    " inside the size argument");
+				    " inside the size argument");
     return warned;
   }
 
@@ -5113,9 +5117,9 @@ public:
   {
     if (m_arg)
       return ev.formatted_print ("operand %qE is of type %qT",
-                                 m_arg, TREE_TYPE (m_arg));
+				 m_arg, TREE_TYPE (m_arg));
     return ev.formatted_print ("at least one operand of the size argument is"
-                               " of a floating-point type");
+			       " of a floating-point type");
   }
 
 private:
@@ -5171,7 +5175,7 @@ private:
 
 void
 region_model::check_dynamic_size_for_floats (const svalue *size_in_bytes,
-                                             region_model_context *ctxt) const
+					     region_model_context *ctxt) const
 {
   gcc_assert (ctxt);
 
@@ -5222,8 +5226,8 @@ region_model::set_dynamic_extents (const region *reg,
   if (ctxt)
     {
       check_dynamic_size_for_taint (reg->get_memory_space (), size_in_bytes,
-                                    ctxt);
-      check_dynamic_size_for_floats (size_in_bytes, cd.get_ctxt ());
+				    ctxt);
+      check_dynamic_size_for_floats (size_in_bytes, ctxt);
     }
   m_dynamic_extents.put (reg, size_in_bytes);
 }
