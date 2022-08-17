@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
-/* Tests warn on use of floating point operands inside the allocation size.
+/* Tests warn on use of floating-point operands inside the calculation
+   of an allocation size.
 
    The test cases here only test for warnings.  The test cases inside
    allocation-size-X.c should be plently enough to test for false positives.  */

@@ -5153,14 +5153,14 @@ public:
   void visit_conjured_svalue (const conjured_svalue *sval) final override
   {
     tree type = sval->get_type ();
-    if (type && SCALAR_FLOAT_TYPE_P (type))
+    if (type && FLOAT_TYPE_P (type))
       m_result = sval;
   }
 
   void visit_initial_svalue (const initial_svalue *sval) final override
   {
     tree type = sval->get_type ();
-    if (type && SCALAR_FLOAT_TYPE_P (type))
+    if (type && FLOAT_TYPE_P (type))
       m_result = sval;
   }
 
