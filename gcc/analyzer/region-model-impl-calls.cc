@@ -1011,6 +1011,38 @@ region_model::impl_call_strchr (const call_details &cd)
   found.update_model (this, NULL, cd.get_ctxt ());
 }
 
+/* Return true if SVAL holds a STRING_CST
+   and set OUT to the size of string.   */
+
+static bool
+maybe_get_cst_string_size (const svalue *sval, int &out)
+{
+  tree cst = sval->maybe_get_constant ();
+  if (!cst || TREE_CODE (cst) != STRING_CST)
+    return false;
+
+  out = TREE_STRING_LENGTH (cst);
+  return true;
+}
+
+/* Return true if REG holds a STRING_CST
+   and set OUT to the size of string.   */
+
+static bool
+maybe_get_cst_string_size (const region *reg, int &out)
+{
+  const string_region *str_reg = dyn_cast <const string_region *> (reg);
+  if (!str_reg)
+    return false;
+
+  tree cst = str_reg->get_string_cst ();
+  if (!cst || TREE_CODE (cst) != STRING_CST)
+    return false;
+
+  out = TREE_STRING_LENGTH (cst);
+  return true;
+}
+
 /* Handle the on_call_pre part of "strcpy" and "__builtin_strcpy_chk".  */
 
 void
@@ -1019,13 +1051,87 @@ region_model::impl_call_strcpy (const call_details &cd)
   const svalue *dest_sval = cd.get_arg_svalue (0);
   const region *dest_reg = deref_rvalue (dest_sval, cd.get_arg_tree (0),
 					 cd.get_ctxt ());
+  const svalue *src_sval = cd.get_arg_svalue (1);
+  const region *src_reg = deref_rvalue (src_sval, cd.get_arg_tree (1),
+					cd.get_ctxt ());
 
   cd.maybe_set_lhs (dest_sval);
 
-  check_region_for_write (dest_reg, cd.get_ctxt ());
+  const svalue *src_contents_sval = get_store_value (src_reg,
+                                                     cd.get_ctxt ());
 
-  /* For now, just mark region's contents as unknown.  */
-  mark_region_as_unknown (dest_reg, cd.get_uncertainty ());
+  int size;
+  if (maybe_get_cst_string_size (src_reg, size)
+      || maybe_get_cst_string_size (src_contents_sval, size))
+    {
+      /* DEST_SVAL points to a string constant and we do know the size.  */
+      tree string_size_tree = build_int_cst (integer_type_node, size);
+      /* Copy the full string.  */
+      const svalue *copied_bytes_sval
+        = m_mgr->get_or_create_constant_svalue (string_size_tree);
+      const region *sized_dest_reg
+        = m_mgr->get_sized_region (dest_reg, NULL_TREE, copied_bytes_sval);
+      set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
+    }
+  else
+    {
+      check_region_for_write (dest_reg, cd.get_ctxt ());
+      mark_region_as_unknown (dest_reg, cd.get_uncertainty ());
+    }
+}
+
+/* Handle the on_call_pre part of "strncpy" and "__builtin_strncpy_chk".  */
+
+void
+region_model::impl_call_strncpy (const call_details &cd)
+{
+  const svalue *dest_sval = cd.get_arg_svalue (0);
+  const region *dest_reg = deref_rvalue (dest_sval, cd.get_arg_tree (0),
+					 cd.get_ctxt ());
+  const svalue *src_sval = cd.get_arg_svalue (1);
+  const region *src_reg = deref_rvalue (src_sval, cd.get_arg_tree (1),
+					cd.get_ctxt ());
+  const svalue *num_bytes_sval = cd.get_arg_svalue (2);
+
+  cd.maybe_set_lhs (dest_sval);
+
+  if (const tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
+    {
+      /* We do have a constant as the third argument.  */
+      const svalue *src_contents_sval = get_store_value (src_reg,
+                                                         cd.get_ctxt ());
+      int size;
+      if (maybe_get_string_size (src_reg, size)
+          || maybe_get_string_size (src_contents_sval, size))
+        {
+          /* DEST_SVAL points to a string constant and we do know the size.  */
+          tree string_size_tree = build_int_cst (integer_type_node, size);
+
+          tree comparison = fold_binary (LT_EXPR, boolean_type_node,
+                                         num_bytes_tree, string_size_tree);
+
+          /* Copy the lesser of STRING_SIZE_TREE and NUM_BYTES_TREE bytes.  */
+          const svalue *copied_bytes_sval = NULL;
+          if (comparison == boolean_true_node)
+            copied_bytes_sval
+              = m_mgr->get_or_create_constant_svalue (num_bytes_tree);
+          else if (comparison == boolean_false_node)
+            copied_bytes_sval
+              = m_mgr->get_or_create_constant_svalue (string_size_tree);
+
+          if (copied_bytes_sval)
+            {
+              const region *sized_dest_reg
+                = m_mgr->get_sized_region (dest_reg, NULL_TREE,
+                                           copied_bytes_sval);
+              set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
+              return;
+            }
+        }
+    }
+
+    check_region_for_write (dest_reg, cd.get_ctxt ());
+    mark_region_as_unknown (dest_reg, cd.get_uncertainty ());
 }
 
 /* Handle the on_call_pre part of "strlen".  */

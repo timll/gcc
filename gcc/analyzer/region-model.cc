@@ -1858,6 +1858,10 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	  case BUILT_IN_STRCPY_CHK:
 	    impl_call_strcpy (cd);
 	    return false;
+	  case BUILT_IN_STRNCPY:
+	  case BUILT_IN_STRNCPY_CHK:
+	    impl_call_strncpy (cd);
+	    return false;
 	  case BUILT_IN_STRLEN:
 	    impl_call_strlen (cd);
 	    return false;
