@@ -1015,13 +1015,13 @@ region_model::impl_call_strchr (const call_details &cd)
    and set OUT to the size of string.   */
 
 static bool
-maybe_get_cst_string_size (const svalue *sval, int &out)
+maybe_get_cst_string_size (const svalue *sval, tree &out)
 {
   tree cst = sval->maybe_get_constant ();
   if (!cst || TREE_CODE (cst) != STRING_CST)
     return false;
 
-  out = TREE_STRING_LENGTH (cst);
+  out = build_int_cst (size_type_node, TREE_STRING_LENGTH (cst));
   return true;
 }
 
@@ -1029,7 +1029,7 @@ maybe_get_cst_string_size (const svalue *sval, int &out)
    and set OUT to the size of string.   */
 
 static bool
-maybe_get_cst_string_size (const region *reg, int &out)
+maybe_get_cst_string_size (const region *reg, tree &out)
 {
   const string_region *str_reg = dyn_cast <const string_region *> (reg);
   if (!str_reg)
@@ -1039,7 +1039,7 @@ maybe_get_cst_string_size (const region *reg, int &out)
   if (!cst || TREE_CODE (cst) != STRING_CST)
     return false;
 
-  out = TREE_STRING_LENGTH (cst);
+  out = build_int_cst (size_type_node, TREE_STRING_LENGTH (cst));
   return true;
 }
 
@@ -1059,14 +1059,13 @@ region_model::impl_call_strcpy (const call_details &cd)
 
   const svalue *src_contents_sval = get_store_value (src_reg,
                                                      cd.get_ctxt ());
-
-  int size;
-  if (maybe_get_cst_string_size (src_reg, size)
-      || maybe_get_cst_string_size (src_contents_sval, size))
+  tree string_size_tree;
+  if (maybe_get_cst_string_size (src_reg, string_size_tree)
+      || maybe_get_cst_string_size (src_contents_sval, string_size_tree))
     {
-      /* DEST_SVAL points to a string constant and we do know the size.  */
-      tree string_size_tree = build_int_cst (integer_type_node, size);
-      /* Copy the full string.  */
+      /* DEST_SVAL points to a string constant and we do know the size.
+      
+         Copy the full string.  */
       const svalue *copied_bytes_sval
         = m_mgr->get_or_create_constant_svalue (string_size_tree);
       const region *sized_dest_reg
@@ -1094,28 +1093,27 @@ region_model::impl_call_strncpy (const call_details &cd)
   const svalue *num_bytes_sval = cd.get_arg_svalue (2);
 
   cd.maybe_set_lhs (dest_sval);
-
+  
   if (const tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
     {
       /* We do have a constant as the third argument.  */
       const svalue *src_contents_sval = get_store_value (src_reg,
                                                          cd.get_ctxt ());
-      int size;
-      if (maybe_get_string_size (src_reg, size)
-          || maybe_get_string_size (src_contents_sval, size))
+      tree string_size_tree;
+      if (maybe_get_cst_string_size (src_reg, string_size_tree)
+          || maybe_get_cst_string_size (src_contents_sval, string_size_tree))
         {
-          /* DEST_SVAL points to a string constant and we do know the size.  */
-          tree string_size_tree = build_int_cst (integer_type_node, size);
-
-          tree comparison = fold_binary (LT_EXPR, boolean_type_node,
+          /* DEST_SVAL points to a string constant and we do know the size.
+          
+             Copy the lesser of STRING_SIZE_TREE and NUM_BYTES_TREE bytes.  */
+          tree cmp = fold_binary (LT_EXPR, boolean_type_node,
                                          num_bytes_tree, string_size_tree);
 
-          /* Copy the lesser of STRING_SIZE_TREE and NUM_BYTES_TREE bytes.  */
           const svalue *copied_bytes_sval = NULL;
-          if (comparison == boolean_true_node)
+          if (cmp == boolean_true_node)
             copied_bytes_sval
               = m_mgr->get_or_create_constant_svalue (num_bytes_tree);
-          else if (comparison == boolean_false_node)
+          else if (cmp == boolean_false_node)
             copied_bytes_sval
               = m_mgr->get_or_create_constant_svalue (string_size_tree);
 
