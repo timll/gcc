@@ -10085,9 +10085,9 @@ and source arguments passed to @code{memcpy} and @code{mempcpy} overlap.
 
 This diagnostic similar to @option{-Wrestrict} but inside the analyzer.
 The region model of the analyzer allows it to catch more bugs than
-@option{-Wrestrict} in presence of aliases and interprocedural flows. Note
-that this diagnostic, unlike @option{-Wrestrict}, does only warn on calls
-to @code{memcpy} and @code{mempcpy}.
+@option{-Wrestrict} in presence of aliases and interprocedural flows.
+Note that this diagnostic, unlike @option{-Wrestrict}, does only warn on
+calls to @code{memcpy} and @code{mempcpy}.
 
 @item -Wno-analyzer-shift-count-negative
 @opindex Wanalyzer-shift-count-negative

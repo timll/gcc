@@ -276,7 +276,7 @@ region::can_have_initial_svalue_p () const
 }
 
 /* If this region is a cast_region, return the original region.
-   Otherwise, return this region.  */ 
+   Otherwise, return this region.  */
 
 const region *
 region::unwrap_cast () const

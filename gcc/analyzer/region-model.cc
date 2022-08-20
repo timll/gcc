@@ -1713,7 +1713,7 @@ public:
 				"argument %u passed to %<restrict%>-qualified"
 				" parameter aliases with argument %u",
 				m_src_idx + 1, m_dst_idx + 1);
-    
+
     if (warned)
       inform (DECL_SOURCE_LOCATION (m_fndecl), "declared here");
 
@@ -1791,11 +1791,11 @@ public:
     if (m_num && m_src_tree && m_dst_tree)
       return ev.formatted_print ("copying %E bytes from %qE to %qE overlaps by"
 				 " %E %s",
-				 m_num, m_src_tree, m_dst_tree, 
+				 m_num, m_src_tree, m_dst_tree,
 				 m_overlapping_bytes, unit);
     return ev.formatted_print ("copying %E bytes from argument %u to argument"
 			       " %u overlaps by %E %s",
-			       m_num, m_src_idx + 1, m_dst_idx + 1, 
+			       m_num, m_src_idx + 1, m_dst_idx + 1,
 			       m_overlapping_bytes, unit);
   }
 
