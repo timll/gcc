@@ -1676,6 +1676,270 @@ void region_model::check_region_bounds (const region *reg,
     }
 }
 
+/* Concrete subclass of pending_diagnostic_subclass complaining about arguments
+   passed to restrict-qualified parameters aliasing with another argument.  */
+
+class restrict_alias : public pending_diagnostic_subclass<restrict_alias>
+{
+public:
+  restrict_alias (tree src_tree, unsigned src_idx,
+		  tree dst_tree, unsigned dst_idx, tree fndecl)
+  : m_src_idx (src_idx), m_dst_idx (dst_idx), m_fndecl (fndecl)
+  {
+    m_src_tree = fixup_tree_for_diagnostic (src_tree);
+    m_dst_tree = fixup_tree_for_diagnostic (dst_tree);
+  }
+
+  const char *get_kind () const final override
+  {
+    return "restrict_diagnostic";
+  }
+
+  bool operator== (const restrict_alias &other) const
+  {
+    return pending_diagnostic::same_tree_p (m_src_tree, other.m_src_tree)
+	   && pending_diagnostic::same_tree_p (m_dst_tree, other.m_dst_tree);
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_restrict;
+  }
+
+  bool emit (rich_location *rich_loc) override
+  {
+    diagnostic_metadata m;
+    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
+				"argument %u passed to %<restrict%>-qualified"
+				" parameter aliases with argument %u",
+				m_src_idx + 1, m_dst_idx + 1);
+    
+    if (warned)
+      inform (DECL_SOURCE_LOCATION (m_fndecl), "declared here");
+
+    return warned;
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) override
+  {
+    if (m_src_tree && m_dst_tree)
+      return ev.formatted_print ("%qE and %qE point to the same memory"
+				 " location", m_src_tree, m_dst_tree);
+    return ev.formatted_print ("argument %u and %u point to the same location",
+			       m_src_idx + 1, m_dst_idx + 1);
+  }
+
+protected:
+  tree m_src_tree;
+  unsigned m_src_idx;
+  tree m_dst_tree;
+  unsigned m_dst_idx;
+  tree m_fndecl;
+};
+
+/* Concrete subclass of restrict_alias to warn on the special case where a
+   number of bytes are copied and the buffers shall not overlap.  */
+
+class region_overlap : public restrict_alias
+{
+public:
+  region_overlap (tree src_tree, unsigned src_idx, tree dst_tree,
+		  unsigned dst_idx, tree num, tree overlapping_bytes,
+		  tree fndecl)
+  : restrict_alias (src_tree, src_idx, dst_tree, dst_idx, fndecl), m_num (num),
+    m_overlapping_bytes (overlapping_bytes)
+  {}
+
+  bool operator== (const region_overlap &other) const
+  {
+    return restrict_alias::operator== (other)
+	    && pending_diagnostic::same_tree_p (m_num, other.m_num)
+	    && pending_diagnostic::same_tree_p (m_overlapping_bytes,
+						other.m_overlapping_bytes)
+	    && pending_diagnostic::same_tree_p (m_fndecl, other.m_fndecl);
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    if (m_fndecl)
+      {
+	bool warned = warning_meta (rich_loc, m, get_controlling_option (),
+				    "calling %qE with overlapping buffers"
+				    " results in undefined behavior",
+				    m_fndecl);
+	if (warned)
+	  inform (rich_loc->get_loc (),
+		  "use %<memmove%> instead of %qE with overlapping buffers",
+		  m_fndecl);
+	return warned;
+      }
+
+    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
+				"calling with overlapping buffers"
+				" results in undefined behavior");
+    if (warned)
+      inform (rich_loc->get_loc (),
+	      "use %<memmove%> instead with overlapping buffers");
+    return warned;
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev)
+  final override
+  {
+    const char *unit = integer_onep (m_overlapping_bytes) ? "byte" : "bytes";
+    if (m_num && m_src_tree && m_dst_tree)
+      return ev.formatted_print ("copying %E bytes from %qE to %qE overlaps by"
+				 " %E %s",
+				 m_num, m_src_tree, m_dst_tree, 
+				 m_overlapping_bytes, unit);
+    return ev.formatted_print ("copying %E bytes from argument %u to argument"
+			       " %u overlaps by %E %s",
+			       m_num, m_src_idx + 1, m_dst_idx + 1, 
+			       m_overlapping_bytes, unit);
+  }
+
+private:
+  tree m_num;
+  tree m_overlapping_bytes;
+};
+
+/* Check whether RQ_PARAM and OTHER_PARAM point to the same memory location
+   and might emit a warning.
+
+   For correct output in the diagnostics, provide the region of the
+   restrict-qualified parameter in RQ_PARAM and the other parameter in
+   OTHER_PARAM.  RQ_PARAM_IDX and OTHER_PARAM_IDX are 0-based indices to
+   retrieve the argument from CD.  */
+
+void region_model::check_region_aliases (const region *rq_param,
+					 unsigned rq_param_idx,
+					 const region *other_param,
+					 unsigned other_param_idx,
+					 const call_details &cd) const
+{
+  /* Do not warn again if Wrestrict already warned at this statement.  */
+  if (warning_suppressed_p (cd.get_call_stmt (), OPT_Wrestrict))
+    return;
+
+  region_model_context *ctxt = cd.get_ctxt ();
+  if (!ctxt)
+    return;
+
+  /* Remove possibly wrapping casts and check whether SRC and DST are equal
+     and not symbolic.  */
+  rq_param = rq_param->unwrap_cast ();
+  other_param = other_param->unwrap_cast ();
+  if (rq_param == other_param && !rq_param->symbolic_p ())
+    {
+      tree rq_param_tree = cd.get_arg_tree (rq_param_idx);
+      tree other_param_tree = cd.get_arg_tree (other_param_idx);
+      ctxt->warn (new restrict_alias (rq_param_tree, rq_param_idx,
+				      other_param_tree, other_param_idx,
+				      cd.get_fndecl_for_call ()));
+    }
+}
+
+/* Checks whether SRC and DST overlap and might emit a warning.
+
+   src_idx and dst_idx are 0-based indices to retrieve the argument from CD.
+   NUM_BYTES_SVAL is the number of bytes that are copied starting from SRC,
+   i.e. the third argument of memcpy.  If NUM_BYTES_SVAL is non-constant, it
+   falls back to check whether SRC and DST point to the same location.  */
+
+void region_model::check_region_overlap (const region *src,
+					 unsigned src_idx,
+					 const region *dst,
+					 unsigned dst_idx,
+					 const svalue *num_bytes_sval,
+					 const call_details &cd) const
+{
+  gcc_assert (num_bytes_sval);
+
+  /* Do not warn again if Wrestrict already warned at this statement.  */
+  if (warning_suppressed_p (cd.get_call_stmt (), OPT_Wrestrict))
+    return;
+
+  region_model_context *ctxt = cd.get_ctxt ();
+  if (!ctxt)
+    return;
+
+  num_bytes_sval = num_bytes_sval->unwrap_cast ();
+  if (tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
+    {
+      /* Bail out if the constant is no integer.  */
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (num_bytes_tree)))
+	return;
+      byte_size_t num_bytes = TREE_INT_CST_LOW (num_bytes_tree);
+
+      region_offset src_offset = src->get_offset ();
+      region_offset dst_offset = dst->get_offset ();
+      const region *src_base_reg = src_offset.get_base_region ();
+      const region *dst_base_reg = dst_offset.get_base_region ();
+
+      /* Check that the base_regions are the same, not symbolic and that
+	 both offsets are also not symbolic.  */
+      if (src_base_reg == dst_base_reg && !src_base_reg->symbolic_p ()
+	  && !src_offset.symbolic_p () && !dst_offset.symbolic_p ())
+	{
+	  /* It is prohibited to get the pointer address of bit fields, thus
+	    we can assume that the offset here is always a multiple of 8.  */
+	  byte_size_t src_byte_offset
+	    = src_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+	  byte_size_t dst_byte_offset
+	    = dst_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+
+	  /* If the SRC pointer < DST pointer, we need to check that
+	    SRC + NUM_BYTES_SVAL is still before the beginning of DST.
+	    Overlapping buffers would yield unexpected behavior if the
+	    implementation copies in the forward direction.
+
+	    Otherwise, vice versa.  */
+	  byte_range src_range (src_byte_offset, num_bytes);
+	  byte_range dst_range (dst_byte_offset, num_bytes);
+	  byte_size_t num_overlap_bytes;
+	  /* Emit a warning if the buffers overlap.  */
+	  if (src_range.intersects_p (dst_range, &num_overlap_bytes))
+	    {
+	      tree src_tree = cd.get_arg_tree (src_idx);
+	      tree dst_tree = cd.get_arg_tree (dst_idx);
+	      tree num_overlap_bytes_tree
+		= wide_int_to_tree (size_type_node, num_overlap_bytes);
+	      ctxt->warn (new region_overlap (src_tree, src_idx,
+					      dst_tree, dst_idx,
+					      num_bytes_tree,
+					      num_overlap_bytes_tree,
+					      cd.get_fndecl_for_call ()));
+	    }
+	}
+    }
+  else if (const widening_svalue *w_sval
+	      = dyn_cast <const widening_svalue *> (num_bytes_sval))
+    {
+      /* Recheck for both values of widening_svalue.  */
+      region_model::check_region_overlap (src, src_idx, dst, dst_idx,
+					  w_sval->get_base_svalue (), cd);
+      region_model::check_region_overlap (src, src_idx, dst, dst_idx,
+					  w_sval->get_iter_svalue (), cd);
+    }
+  else
+    {
+      /* Fall back and only check for aliases.  */
+      src = src->unwrap_cast ();
+      dst = dst->unwrap_cast ();
+      if (src == dst && !src->symbolic_p ())
+	{
+	  tree src_tree = cd.get_arg_tree (src_idx);
+	  tree dst_tree = cd.get_arg_tree (dst_idx);
+	  /* The number of copied bytes is equal to the overlapping bytes.  */
+	  tree num_bytes_tree = get_representative_tree (num_bytes_sval);
+	  ctxt->warn (new region_overlap (src_tree, src_idx, dst_tree, dst_idx,
+					  num_bytes_tree, num_bytes_tree,
+					  cd.get_fndecl_for_call ()));
+	}
+    }
+}
+
 /* Ensure that all arguments at the call described by CD are checked
    for poisoned values, by calling get_rvalue on each argument.  */
 
@@ -1844,6 +2108,10 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	  case BUILT_IN_MEMCPY_CHK:
 	    impl_call_memcpy (cd);
 	    return false;
+	  case BUILT_IN_MEMPCPY:
+	  case BUILT_IN_MEMPCPY_CHK:
+	    impl_call_mempcpy (cd);
+	    return false;
 	  case BUILT_IN_MEMSET:
 	  case BUILT_IN_MEMSET_CHK:
 	    impl_call_memset (cd);
@@ -1991,6 +2259,11 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	       && (!(callee_fndecl_flags & (ECF_CONST | ECF_PURE)))
 	       && !fndecl_built_in_p (callee_fndecl))
 	unknown_side_effects = true;
+
+      /* TODO: Check for function calls that any restrict-qualified parameter
+	       does not alias with another parameter.
+	       The C standard states that two aliasing restrict-qualified
+	       parameters are defined behavior if neither is written.  */
     }
   else
     unknown_side_effects = true;

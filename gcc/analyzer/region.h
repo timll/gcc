@@ -155,6 +155,7 @@ public:
   const frame_region *maybe_get_frame_region () const;
   enum memory_space get_memory_space () const;
   bool can_have_initial_svalue_p () const;
+  const region *unwrap_cast () const;
 
   tree maybe_get_decl () const;
 

@@ -463,6 +463,7 @@ Objective-C and Objective-C++ Dialects}.
 -Wno-analyzer-possible-null-argument @gol
 -Wno-analyzer-possible-null-dereference @gol
 -Wno-analyzer-putenv-of-auto-var @gol
+-Wno-analyzer-restrict @gol
 -Wno-analyzer-shift-count-negative @gol
 -Wno-analyzer-shift-count-overflow @gol
 -Wno-analyzer-stale-setjmp-buffer @gol
@@ -9769,6 +9770,7 @@ Enabling this option effectively enables the following warnings:
 -Wanalyzer-possible-null-argument @gol
 -Wanalyzer-possible-null-dereference @gol
 -Wanalyzer-putenv-of-auto-var @gol
+-Wanalyzer-restrict @gol
 -Wanalyzer-shift-count-negative @gol
 -Wanalyzer-shift-count-overflow @gol
 -Wanalyzer-stale-setjmp-buffer @gol
@@ -10071,6 +10073,21 @@ call to @code{putenv} is passed a pointer to an automatic variable
 or an on-stack buffer.
 
 See @uref{https://wiki.sei.cmu.edu/confluence/x/6NYxBQ, POS34-C. Do not call putenv() with a pointer to an automatic variable as the argument}.
+
+@item -Wno-analyzer-restrict
+@opindex Wanalyzer-restrict
+@opindex Wno-analyzer-restrict
+This warning requires @option{-fanalyzer}, which enables it; use
+@option{-Wno-analyzer-restrict} to disable it.
+
+This diagnostic warns for paths through the code in which the destination
+and source arguments passed to @code{memcpy} and @code{mempcpy} overlap.
+
+This diagnostic similar to @option{-Wrestrict} but inside the analyzer.
+The region model of the analyzer allows it to catch more bugs than
+@option{-Wrestrict} in presence of aliases and interprocedural flows. Note
+that this diagnostic, unlike @option{-Wrestrict}, does only warn on calls
+to @code{memcpy} and @code{mempcpy}.
 
 @item -Wno-analyzer-shift-count-negative
 @opindex Wanalyzer-shift-count-negative
