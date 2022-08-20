@@ -874,7 +874,6 @@ class region_model
 			  region_model_context *ctxt) const;
   void check_region_bounds (const region *reg, enum access_direction dir,
 			    region_model_context *ctxt) const;
-
   void check_region_aliases (const region *src, unsigned src_idx,
 			     const region *dst, unsigned dst_idx,
 			     const call_details &cd) const;
@@ -882,6 +881,7 @@ class region_model
 			     const region *dst, unsigned dst_idx,
 			     const svalue *num_sval,
 			     const call_details &cd) const;
+
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
 						tree callee_fndecl,

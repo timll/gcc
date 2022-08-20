@@ -1697,8 +1697,10 @@ public:
 
   bool operator== (const restrict_alias &other) const
   {
-    return pending_diagnostic::same_tree_p (m_src_tree, other.m_src_tree)
-	   && pending_diagnostic::same_tree_p (m_dst_tree, other.m_dst_tree);
+    return m_src_idx == other.m_src_idx && m_dst_idx == other.m_dst_idx
+	   && pending_diagnostic::same_tree_p (m_src_tree, other.m_src_tree)
+	   && pending_diagnostic::same_tree_p (m_dst_tree, other.m_dst_tree)
+	   && pending_diagnostic::same_tree_p (m_fndecl, other.m_fndecl);
   }
 
   int get_controlling_option () const final override
@@ -1753,10 +1755,9 @@ public:
   bool operator== (const region_overlap &other) const
   {
     return restrict_alias::operator== (other)
-	    && pending_diagnostic::same_tree_p (m_num, other.m_num)
-	    && pending_diagnostic::same_tree_p (m_overlapping_bytes,
-						other.m_overlapping_bytes)
-	    && pending_diagnostic::same_tree_p (m_fndecl, other.m_fndecl);
+	   && pending_diagnostic::same_tree_p (m_num, other.m_num)
+	   && pending_diagnostic::same_tree_p (m_overlapping_bytes,
+					       other.m_overlapping_bytes);
   }
 
   bool emit (rich_location *rich_loc) final override
@@ -2261,9 +2262,13 @@ region_model::on_call_pre (const gcall *call, region_model_context *ctxt,
 	unknown_side_effects = true;
 
       /* TODO: Check for function calls that any restrict-qualified parameter
-	       does not alias with another parameter.
-	       The C standard states that two aliasing restrict-qualified
-	       parameters are defined behavior if neither is written.  */
+	       does not alias with another parameter with the
+	       region_model::check_region_aliases method.
+
+	       The C standard states that aliases to restrict-qualified
+	       parameters are defined behavior if neither the alias nor the
+	       restrict-qualified parameter is written.  We did not come to a
+	       conclusion on how to handle this case yet.  */
     }
   else
     unknown_side_effects = true;
