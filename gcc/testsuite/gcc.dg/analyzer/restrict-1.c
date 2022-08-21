@@ -8,15 +8,13 @@
 /* Avoid folding of memcpy.  */
 typedef void * (*memcpy_t) (void *dst, const void *src, size_t n);
 
-typedef void * (*mempcpy_t) (void *dst, const void *src, size_t n);
-
 static memcpy_t __attribute__((noinline))
 get_memcpy (void)
 {
   return memcpy;
 }
 
-static mempcpy_t __attribute__((noinline))
+static memcpy_t __attribute__((noinline))
 get_mempcpy (void)
 {
   return mempcpy;
