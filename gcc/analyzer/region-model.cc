@@ -1679,11 +1679,12 @@ void region_model::check_region_bounds (const region *reg,
 /* Concrete subclass of pending_diagnostic_subclass complaining about arguments
    passed to restrict-qualified parameters aliasing with another argument.  */
 
-class restrict_alias : public pending_diagnostic_subclass<restrict_alias>
+class restrict_alias_diagnostic
+  : public pending_diagnostic_subclass<restrict_alias_diagnostic>
 {
 public:
-  restrict_alias (tree src_tree, unsigned src_idx,
-		  tree dst_tree, unsigned dst_idx, tree fndecl)
+  restrict_alias_diagnostic (tree src_tree, unsigned src_idx,
+			     tree dst_tree, unsigned dst_idx, tree fndecl)
   : m_src_idx (src_idx), m_dst_idx (dst_idx), m_fndecl (fndecl)
   {
     m_src_tree = fixup_tree_for_diagnostic (src_tree);
@@ -1695,7 +1696,7 @@ public:
     return "restrict_diagnostic";
   }
 
-  bool operator== (const restrict_alias &other) const
+  bool operator== (const restrict_alias_diagnostic &other) const
   {
     return m_src_idx == other.m_src_idx && m_dst_idx == other.m_dst_idx
 	   && pending_diagnostic::same_tree_p (m_src_tree, other.m_src_tree)
@@ -1742,19 +1743,19 @@ protected:
 /* Concrete subclass of restrict_alias to warn on the special case where a
    number of bytes are copied and the buffers shall not overlap.  */
 
-class region_overlap : public restrict_alias
+class region_overlap_diagnostic : public restrict_alias_diagnostic
 {
 public:
-  region_overlap (tree src_tree, unsigned src_idx, tree dst_tree,
-		  unsigned dst_idx, tree num, tree overlapping_bytes,
-		  tree fndecl)
-  : restrict_alias (src_tree, src_idx, dst_tree, dst_idx, fndecl), m_num (num),
-    m_overlapping_bytes (overlapping_bytes)
+  region_overlap_diagnostic (tree src_tree, unsigned src_idx,
+			     tree dst_tree, unsigned dst_idx, tree num,
+			     tree overlapping_bytes, tree fndecl)
+  : restrict_alias_diagnostic (src_tree, src_idx, dst_tree, dst_idx, fndecl),
+    m_num (num), m_overlapping_bytes (overlapping_bytes)
   {}
 
-  bool operator== (const region_overlap &other) const
+  bool operator== (const region_overlap_diagnostic &other) const
   {
-    return restrict_alias::operator== (other)
+    return restrict_alias_diagnostic::operator== (other)
 	   && pending_diagnostic::same_tree_p (m_num, other.m_num)
 	   && pending_diagnostic::same_tree_p (m_overlapping_bytes,
 					       other.m_overlapping_bytes);
@@ -1835,9 +1836,10 @@ void region_model::check_region_aliases (const region *rq_param,
     {
       tree rq_param_tree = cd.get_arg_tree (rq_param_idx);
       tree other_param_tree = cd.get_arg_tree (other_param_idx);
-      ctxt->warn (new restrict_alias (rq_param_tree, rq_param_idx,
-				      other_param_tree, other_param_idx,
-				      cd.get_fndecl_for_call ()));
+      ctxt->warn (new restrict_alias_diagnostic (rq_param_tree, rq_param_idx,
+						 other_param_tree,
+						 other_param_idx,
+						 cd.get_fndecl_for_call ()));
     }
 }
 
@@ -1881,7 +1883,7 @@ void region_model::check_region_overlap (const region *src,
       /* Check that the base_regions are the same, not symbolic and that
 	 both offsets are also not symbolic.  */
       if (src_base_reg == dst_base_reg && !src_base_reg->symbolic_p ()
-	  && !src_offset.symbolic_p () && !dst_offset.symbolic_p ())
+		&& !src_offset.symbolic_p () && !dst_offset.symbolic_p ())
 	{
 	  /* It is prohibited to get the pointer address of bit fields, thus
 	    we can assume that the offset here is always a multiple of 8.  */
@@ -1904,13 +1906,14 @@ void region_model::check_region_overlap (const region *src,
 	    {
 	      tree src_tree = cd.get_arg_tree (src_idx);
 	      tree dst_tree = cd.get_arg_tree (dst_idx);
-	      tree num_overlap_bytes_tree
+	      tree num_overlap_tree
 		= wide_int_to_tree (size_type_node, num_overlap_bytes);
-	      ctxt->warn (new region_overlap (src_tree, src_idx,
-					      dst_tree, dst_idx,
-					      num_bytes_tree,
-					      num_overlap_bytes_tree,
-					      cd.get_fndecl_for_call ()));
+	      tree fndecl = cd.get_fndecl_for_call ();
+	      ctxt->warn (new region_overlap_diagnostic (src_tree, src_idx,
+							 dst_tree, dst_idx,
+							 num_bytes_tree,
+							 num_overlap_tree,
+							 fndecl));
 	    }
 	}
     }
@@ -1934,9 +1937,12 @@ void region_model::check_region_overlap (const region *src,
 	  tree dst_tree = cd.get_arg_tree (dst_idx);
 	  /* The number of copied bytes is equal to the overlapping bytes.  */
 	  tree num_bytes_tree = get_representative_tree (num_bytes_sval);
-	  ctxt->warn (new region_overlap (src_tree, src_idx, dst_tree, dst_idx,
-					  num_bytes_tree, num_bytes_tree,
-					  cd.get_fndecl_for_call ()));
+	  tree fndecl = cd.get_fndecl_for_call ();
+	  ctxt->warn (new region_overlap_diagnostic (src_tree, src_idx,
+						    dst_tree, dst_idx,
+						    num_bytes_tree,
+						    num_bytes_tree,
+						    fndecl));
 	}
     }
 }
