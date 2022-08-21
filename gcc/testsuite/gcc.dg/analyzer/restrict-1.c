@@ -39,6 +39,7 @@ void test2 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test2 } */
   /* { dg-message "copying 8 bytes from '&buf' to '&buf\\\[1\\\]' overlaps by 4 bytes" "note" { target *-*-* } test2 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test2 } */
 }
 
 /* element_region & element_region.  */
@@ -60,6 +61,7 @@ void test4 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test4 } */
   /* { dg-message "copying 8 bytes from '&buf\\\[0\\\]' to '&buf\\\[1\\\]' overlaps by 4 bytes" "note" { target *-*-* } test4 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test4 } */
 }
 
 /* offset_region & decl_region.  */
@@ -81,6 +83,7 @@ void test6 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test6 } */
   /* { dg-message "copying 8 bytes from '&buf' to '&buf \\\+ 4' overlaps by 4 bytes" "note" { target *-*-* } test6 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test6 } */
 }
 
 /* offset_region & offset_region.  */
@@ -102,6 +105,7 @@ void test8 (void)
 
   /* { dg-warning "calling 'mempcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test8 } */
   /* { dg-message "copying 8 bytes from '&buf \\\+ 8' to '&buf \\\+ 12' overlaps by 4 bytes" "note" { target *-*-* } test8 } */
+  /* { dg-message "use 'memmove' instead of 'mempcpy' with overlapping buffers" "note" { target *-*-* } test8 } */
 }
 
 /* element_region & heap_allocated_region.  */
@@ -129,6 +133,7 @@ void test10 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test10 } */
   /* { dg-message "copying 8 bytes from 'buf' to 'buf \\\+ 4' overlaps by 4 bytes" "note" { target *-*-* } test10 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test10 } */
 }
 
 /* offset_region & heap_allocated_region.  */
@@ -156,6 +161,7 @@ void test12 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test12 } */
   /* { dg-message "copying 8 bytes from 'buf' to 'buf \\\+ 4' overlaps by 4 bytes" "note" { target *-*-* } test12 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test12 } */
 }
 
 /* aliased region.  */
@@ -170,6 +176,7 @@ void test13 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test13 } */
   /* { dg-message "copying 8 bytes from '&buf' to 'view' overlaps by 8 bytes" "note" { target *-*-* } test13 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test13 } */
 }
 
 void test14 (void)
@@ -191,6 +198,7 @@ void test15 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test15 } */
   /* { dg-message "copying 8 bytes from '&buf' to 'view \\\+ 4' overlaps by 4 bytes" "note" { target *-*-* } test15 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test15 } */
 }
 
 void test16 (void)
@@ -203,6 +211,7 @@ void test16 (void)
 
   /* { dg-warning "calling 'mempcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test16 } */
   /* { dg-message "copying 4 bytes from '&buf' to 'view' overlaps by 4 bytes" "note" { target *-*-* } test16 } */
+  /* { dg-message "use 'memmove' instead of 'mempcpy' with overlapping buffers" "note" { target *-*-* } test16 } */
 }
 
 void test17 (void)
@@ -241,6 +250,7 @@ void test19 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test19 } */
   /* { dg-message "copying 8 bytes from '&s.i' to '&s.i \\\+ 4' overlaps by 4 bytes" "note" { target *-*-* } test19 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test19 } */
 }
 
 void test20 (int cond)
@@ -257,6 +267,7 @@ void test20 (int cond)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test20 } */
   /* { dg-message "copying 12 bytes from '&buf' to '&buf \\\+ 8' overlaps by 4 bytes" "note" { target *-*-* } test20 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test20 } */
 }
 
 struct nested_struct {
@@ -287,8 +298,10 @@ void test21 (void)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test21a } */
   /* { dg-message "copying 12 bytes from" "note" { target *-*-* } test21a } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test21a } */
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test21b } */
   /* { dg-message "copying 12 bytes from" "note" { target *-*-* } test21b } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test21b } */
 }
 
 /* 35 bits aka more than 4 bytes.  */
@@ -311,6 +324,7 @@ void test22 (void)
   fn (ptr + 2, ptr, 3); /* { dg-line test22 } */
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test22 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test22 } */
   /* { dg-message "copying 3 bytes from 'ptr' to 'ptr \\\+ 2' overlaps by 1 byte\\n" "note" { target *-*-* } test22 } */
 }
 
@@ -339,6 +353,7 @@ void test24 (void)
   fn (ptr + 1, &u, 2); /* { dg-line test24 } */
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test24 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test24 } */
   /* { dg-message "copying 2 bytes from '&u' to 'ptr \\\+ 1' overlaps by 1 byte\\n" "note" { target *-*-* } test24 } */
 }
 
@@ -353,6 +368,7 @@ void test25 (int n)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test25 } */
   /* { dg-message "copying n \\\* 2 bytes from '&buf' to '&buf' overlaps by n \\\* 2 bytes" "note" { target *-*-* } test25 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test25 } */
 }
 
 void test26 (int n)
@@ -365,6 +381,7 @@ void test26 (int n)
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test26 } */
   /* { dg-message "copying n \\\* 2 bytes from '&buf' to 'alias' overlaps by n \\\* 2 bytes" "note" { target *-*-* } test26 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test26 } */
 }
 
 void test27 (int n)
@@ -386,8 +403,8 @@ void __attribute__((noinline)) memcpy_wrapper (void *dst, void *src, size_t coun
 
   /* { dg-warning "calling 'memcpy' with overlapping buffers results in undefined behavior" "warning" { target *-*-* } test28 } */
   /* { dg-message "copying 12 bytes from 'src' to 'dst' overlaps by 4 bytes" "note" { target *-*-* } test28 } */
+  /* { dg-message "use 'memmove' instead of 'memcpy' with overlapping buffers" "note" { target *-*-* } test28 } */
 }
-
 
 void test28 (void)
 {
