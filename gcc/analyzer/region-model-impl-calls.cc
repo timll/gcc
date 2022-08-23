@@ -698,6 +698,31 @@ region_model::impl_call_operator_delete (const call_details &cd)
     }
 }
 
+/* Return true if both values where constants
+   and set OUT to the lesser of both.  */
+
+static bool
+get_lesser (const svalue *a, const svalue *b, const svalue **out)
+{
+  tree a_cst = a->maybe_get_constant ();
+  tree b_cst = b->maybe_get_constant ();
+  if (a_cst && b_cst)
+   {
+      tree cmp = fold_binary (LT_EXPR, boolean_type_node, a_cst, b_cst);
+      if (cmp == boolean_true_node)
+	{
+	  *out = a;
+	  return true;
+	}
+      else if (cmp == boolean_false_node)
+	{
+	  *out = b;
+	  return true;
+	}
+   }
+   return false;
+}
+
 /* Handle the on_call_post part of "realloc":
 
      void *realloc(void *ptr, size_t size);
@@ -900,32 +925,13 @@ region_model::impl_call_realloc (const call_details &cd)
     const svalue *get_copied_size (const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
-      tree old_size_cst = old_size_sval->maybe_get_constant ();
-      tree new_size_cst = new_size_sval->maybe_get_constant ();
-
-      if (old_size_cst && new_size_cst)
-	{
-	  /* Both are constants and comparable.  */
-	  tree cmp = fold_binary (LT_EXPR, boolean_type_node,
-				  old_size_cst, new_size_cst);
-
-	  if (cmp == boolean_true_node)
-	    return old_size_sval;
-	  else
-	    return new_size_sval;
-	}
-      else if (new_size_cst)
-	{
-	  /* OLD_SIZE_SVAL is symbolic, so return that.  */
-	  return old_size_sval;
-	}
+      const svalue *lesser;
+      if (get_lesser (old_size_sval, new_size_sval, &lesser))
+	return lesser;
+      else if (new_size_sval->get_kind () == SK_CONSTANT)
+	return old_size_sval;
       else
-	{
-	  /* NEW_SIZE_SVAL is symbolic or both are symbolic.
-	     Return NEW_SIZE_SVAL, because implementations of realloc
-	     probably only moves the buffer if the new size is larger.  */
-	  return new_size_sval;
-	}
+	return new_size_sval;
     }
   };
 
@@ -1011,38 +1017,6 @@ region_model::impl_call_strchr (const call_details &cd)
   found.update_model (this, NULL, cd.get_ctxt ());
 }
 
-/* Return true if SVAL holds a STRING_CST
-   and set OUT to the size of string.   */
-
-static bool
-maybe_get_cst_string_size (const svalue *sval, tree &out)
-{
-  tree cst = sval->maybe_get_constant ();
-  if (!cst || TREE_CODE (cst) != STRING_CST)
-    return false;
-
-  out = build_int_cst (size_type_node, TREE_STRING_LENGTH (cst));
-  return true;
-}
-
-/* Return true if REG holds a STRING_CST
-   and set OUT to the size of string.   */
-
-static bool
-maybe_get_cst_string_size (const region *reg, tree &out)
-{
-  const string_region *str_reg = dyn_cast <const string_region *> (reg);
-  if (!str_reg)
-    return false;
-
-  tree cst = str_reg->get_string_cst ();
-  if (!cst || TREE_CODE (cst) != STRING_CST)
-    return false;
-
-  out = build_int_cst (size_type_node, TREE_STRING_LENGTH (cst));
-  return true;
-}
-
 /* Handle the on_call_pre part of "strcpy" and "__builtin_strcpy_chk".  */
 
 void
@@ -1054,29 +1028,18 @@ region_model::impl_call_strcpy (const call_details &cd)
   const svalue *src_sval = cd.get_arg_svalue (1);
   const region *src_reg = deref_rvalue (src_sval, cd.get_arg_tree (1),
 					cd.get_ctxt ());
+  const svalue *src_contents_sval = get_store_value (src_reg,
+						     cd.get_ctxt ());
 
   cd.maybe_set_lhs (dest_sval);
 
-  const svalue *src_contents_sval = get_store_value (src_reg,
-                                                     cd.get_ctxt ());
-  tree string_size_tree;
-  if (maybe_get_cst_string_size (src_reg, string_size_tree)
-      || maybe_get_cst_string_size (src_contents_sval, string_size_tree))
-    {
-      /* DEST_SVAL points to a string constant and we do know the size.
-      
-         Copy the full string.  */
-      const svalue *copied_bytes_sval
-        = m_mgr->get_or_create_constant_svalue (string_size_tree);
-      const region *sized_dest_reg
-        = m_mgr->get_sized_region (dest_reg, NULL_TREE, copied_bytes_sval);
-      set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
-    }
-  else
-    {
-      check_region_for_write (dest_reg, cd.get_ctxt ());
-      mark_region_as_unknown (dest_reg, cd.get_uncertainty ());
-    }
+  const svalue *copied_bytes_sval = get_string_size (src_reg);
+  if (copied_bytes_sval->get_kind () == SK_UNKNOWN)
+    copied_bytes_sval = get_string_size (src_contents_sval);
+
+  const region *sized_dest_reg
+    = m_mgr->get_sized_region (dest_reg, NULL_TREE, copied_bytes_sval);
+  set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
 }
 
 /* Handle the on_call_pre part of "strncpy" and "__builtin_strncpy_chk".  */
@@ -1090,46 +1053,23 @@ region_model::impl_call_strncpy (const call_details &cd)
   const svalue *src_sval = cd.get_arg_svalue (1);
   const region *src_reg = deref_rvalue (src_sval, cd.get_arg_tree (1),
 					cd.get_ctxt ());
+  const svalue *src_contents_sval = get_store_value (src_reg,
+						     cd.get_ctxt ());
   const svalue *num_bytes_sval = cd.get_arg_svalue (2);
 
   cd.maybe_set_lhs (dest_sval);
+
+  const svalue *string_size_sval = get_string_size (src_reg);
+  if (string_size_sval->get_kind () == SK_UNKNOWN)
+    string_size_sval = get_string_size (src_contents_sval);
   
-  if (const tree num_bytes_tree = num_bytes_sval->maybe_get_constant ())
-    {
-      /* We do have a constant as the third argument.  */
-      const svalue *src_contents_sval = get_store_value (src_reg,
-                                                         cd.get_ctxt ());
-      tree string_size_tree;
-      if (maybe_get_cst_string_size (src_reg, string_size_tree)
-          || maybe_get_cst_string_size (src_contents_sval, string_size_tree))
-        {
-          /* DEST_SVAL points to a string constant and we do know the size.
-          
-             Copy the lesser of STRING_SIZE_TREE and NUM_BYTES_TREE bytes.  */
-          tree cmp = fold_binary (LT_EXPR, boolean_type_node,
-                                         num_bytes_tree, string_size_tree);
+  const svalue *copied_bytes_sval;
+  if (!get_lesser (string_size_sval, num_bytes_sval, &copied_bytes_sval))
+    copied_bytes_sval = m_mgr->get_or_create_unknown_svalue (size_type_node);
 
-          const svalue *copied_bytes_sval = NULL;
-          if (cmp == boolean_true_node)
-            copied_bytes_sval
-              = m_mgr->get_or_create_constant_svalue (num_bytes_tree);
-          else if (cmp == boolean_false_node)
-            copied_bytes_sval
-              = m_mgr->get_or_create_constant_svalue (string_size_tree);
-
-          if (copied_bytes_sval)
-            {
-              const region *sized_dest_reg
-                = m_mgr->get_sized_region (dest_reg, NULL_TREE,
-                                           copied_bytes_sval);
-              set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
-              return;
-            }
-        }
-    }
-
-    check_region_for_write (dest_reg, cd.get_ctxt ());
-    mark_region_as_unknown (dest_reg, cd.get_uncertainty ());
+  const region *sized_dest_reg = m_mgr->get_sized_region (dest_reg, NULL_TREE,
+							  copied_bytes_sval);
+  set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
 }
 
 /* Handle the on_call_pre part of "strlen".  */
