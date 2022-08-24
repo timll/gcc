@@ -698,8 +698,8 @@ region_model::impl_call_operator_delete (const call_details &cd)
     }
 }
 
-/* Return true if both values where constants
-   and set OUT to the lesser of both.  */
+/* Return true if both values are constants and
+   set OUT to the lesser of both.  */
 
 static bool
 get_lesser (const svalue *a, const svalue *b, const svalue **out)
