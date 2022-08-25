@@ -233,6 +233,12 @@ public:
 
 namespace ana {
 
+enum class folding_mode {
+  FM_EQ, /* Only fold toward known values.  */
+  FM_UB, /* Fold toward the upper bound.  */
+  FM_LB  /* Fold toward the lower bound.  */
+};
+
 /* A class responsible for owning and consolidating region and svalue
    instances.
    region and svalue instances are immutable as far as clients are
@@ -362,7 +368,9 @@ public:
 
   void dump_untracked_regions () const;
 
-  const svalue *maybe_fold_svalue_with_constraints (const svalue *sval, constraint_manager *cm);
+  const constant_svalue * maybe_fold_svalue (const svalue *sval,
+					     enum folding_mode mode,
+					     constraint_manager *cm);
 
   const svalue *maybe_fold_unaryop (tree type, enum tree_code op,
 				    const svalue *arg);

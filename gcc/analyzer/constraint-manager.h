@@ -67,6 +67,9 @@ public:
   bool below_lower_bound (tree rhs_const) const;
   bool above_upper_bound (tree rhs_const) const;
 
+  tree get_lower_bound_cst () const;
+  tree get_upper_bound_cst () const;
+
   bool add_bound (bound b, enum bound_kind bound_kind);
   bool add_bound (enum tree_code op, tree rhs_const);
 

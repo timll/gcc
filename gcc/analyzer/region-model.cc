@@ -1599,16 +1599,31 @@ void region_model::check_region_bounds (const region *reg,
 {
   gcc_assert (ctxt);
 
-  region_offset reg_offset = reg->get_offset ();
+  region_offset reg_offset = reg->get_offset (m_mgr);
   const region *base_reg = reg_offset.get_base_region ();
 
-  /* Bail out on symbolic offsets or symbolic regions.
+  /* Bail out on symbolic regions.
      (e.g. because the analyzer did not see previous offsets on the latter,
      it might think that a negative access is before the buffer).  */
-  if (reg_offset.symbolic_p () || base_reg->symbolic_p ())
+  if (base_reg->symbolic_p ())
     return;
-  byte_offset_t offset_unsigned
-    = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+
+  byte_offset_t offset_unsigned;
+  if (reg_offset.symbolic_p ())
+    {
+      /* Try to fold the symbolic offset using the constraints.  */
+      const constant_svalue *folded
+	= m_mgr->maybe_fold_svalue (reg_offset.get_sym_bit_offset (),
+				    folding_mode::FM_EQ, m_constraints);
+      if (!folded)
+	return;
+      offset_unsigned
+	= wi::to_offset (folded->get_constant ()) >> LOG2_BITS_PER_UNIT;
+    }
+  else
+    {
+      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+    }
   /* The constant offset from a pointer is represented internally as a sizetype
      but should be interpreted as a signed value here.  The statement below
      converts the offset to a signed integer with the same precision the
@@ -1623,9 +1638,17 @@ void region_model::check_region_bounds (const region *reg,
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
   tree num_bytes_tree = num_bytes_sval->maybe_get_constant ();
   if (!num_bytes_tree || TREE_CODE (num_bytes_tree) != INTEGER_CST)
-    /* If we do not know how many bytes were read/written,
-       assume that at least one byte was read/written.  */
-    num_bytes_tree = integer_one_node;
+    {
+      const constant_svalue *folded
+	= m_mgr->maybe_fold_svalue (num_bytes_sval, folding_mode::FM_EQ,
+				    m_constraints);
+      if (folded)
+	num_bytes_tree = folded->get_constant ();
+      else
+	/* If we do not know how many bytes were read/written,
+	  assume that at least one byte was read/written.  */
+	num_bytes_tree = integer_one_node;
+    }
 
   byte_range out (0, 0);
   /* NUM_BYTES_TREE should always be interpreted as unsigned.  */
@@ -5608,7 +5631,7 @@ test_struct ()
   /* Verify get_offset for "c.x".  */
   {
     const region *c_x_reg = model.get_lvalue (c_x, NULL);
-    region_offset offset = c_x_reg->get_offset ();
+    region_offset offset = c_x_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (c, NULL));
     ASSERT_EQ (offset.get_bit_offset (), 0);
   }
@@ -5616,7 +5639,7 @@ test_struct ()
   /* Verify get_offset for "c.y".  */
   {
     const region *c_y_reg = model.get_lvalue (c_y, NULL);
-    region_offset offset = c_y_reg->get_offset ();
+    region_offset offset = c_y_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (c, NULL));
     ASSERT_EQ (offset.get_bit_offset (), INT_TYPE_SIZE);
   }
@@ -7111,7 +7134,7 @@ test_var ()
 
   /* Verify get_offset for "i".  */
   {
-    region_offset offset = i_reg->get_offset ();
+    region_offset offset = i_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), i_reg);
     ASSERT_EQ (offset.get_bit_offset (), 0);
   }
@@ -7160,7 +7183,7 @@ test_array_2 ()
   /* Verify get_offset for "arr[0]".  */
   {
     const region *arr_0_reg = model.get_lvalue (arr_0, NULL);
-    region_offset offset = arr_0_reg->get_offset ();
+    region_offset offset = arr_0_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (arr, NULL));
     ASSERT_EQ (offset.get_bit_offset (), 0);
   }
@@ -7168,7 +7191,7 @@ test_array_2 ()
   /* Verify get_offset for "arr[1]".  */
   {
     const region *arr_1_reg = model.get_lvalue (arr_1, NULL);
-    region_offset offset = arr_1_reg->get_offset ();
+    region_offset offset = arr_1_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (arr, NULL));
     ASSERT_EQ (offset.get_bit_offset (), INT_TYPE_SIZE);
   }

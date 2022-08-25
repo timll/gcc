@@ -301,6 +301,22 @@ range::above_upper_bound (tree rhs_const) const
 			    m_upper_bound.m_constant).is_true ();
 }
 
+/* Return the lower bound tree.  */
+
+tree
+range::get_lower_bound_cst () const
+{
+  return m_lower_bound.m_constant;
+}
+
+/* Return the upper bound tree.  */
+
+tree
+range::get_upper_bound_cst () const
+{
+  return m_upper_bound.m_constant;
+}
+
 /* Attempt to add B to the bound of the given kind of this range.
    Return true if feasible; false if infeasible.  */
 

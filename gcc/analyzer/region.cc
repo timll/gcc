@@ -290,10 +290,10 @@ region::maybe_get_decl () const
    first call and caching it internally).  */
 
 region_offset
-region::get_offset () const
+region::get_offset (region_model_manager *mgr) const
 {
   if(!m_cached_offset)
-    m_cached_offset = new region_offset (calc_offset ());
+    m_cached_offset = new region_offset (calc_offset (mgr));
   return *m_cached_offset;
 }
 
@@ -491,10 +491,12 @@ region::get_subregions_for_binding (region_model_manager *mgr,
    or a symbolic offset.  */
 
 region_offset
-region::calc_offset () const
+region::calc_offset (region_model_manager *mgr) const
 {
   const region *iter_region = this;
+  bool is_symbolic = false;
   bit_offset_t accum_bit_offset = 0;
+  const svalue *accum_sym_bit_offset = NULL;
 
   while (iter_region)
     {
@@ -505,12 +507,32 @@ region::calc_offset () const
 	case RK_OFFSET:
 	case RK_BIT_RANGE:
 	  {
-	    bit_offset_t rel_bit_offset;
-	    if (!iter_region->get_relative_concrete_offset (&rel_bit_offset))
-	      return region_offset::make_symbolic
-		(iter_region->get_parent_region ());
-	    accum_bit_offset += rel_bit_offset;
-	    iter_region = iter_region->get_parent_region ();
+	    if (is_symbolic)
+	      {
+		const svalue *sval
+		  = iter_region->get_relative_symbolic_offset (mgr);
+		if (!accum_sym_bit_offset)
+		  accum_sym_bit_offset
+		    = mgr->get_or_create_constant_svalue (integer_zero_node);
+		accum_sym_bit_offset
+		  = mgr->get_or_create_binop (integer_type_node, PLUS_EXPR,
+					      accum_sym_bit_offset, sval);
+		iter_region = iter_region->get_parent_region ();
+		    }
+	    else
+	      {
+		 bit_offset_t rel_bit_offset;
+		 if (iter_region->get_relative_concrete_offset
+		      (&rel_bit_offset))
+		  {
+		    accum_bit_offset += rel_bit_offset;
+		    iter_region = iter_region->get_parent_region ();
+		  }
+		else
+		  {
+		    is_symbolic = true;
+		  }
+	      }
 	  }
 	  continue;
 
@@ -527,10 +549,18 @@ region::calc_offset () const
 	  continue;
 
 	default:
-	  return region_offset::make_concrete (iter_region, accum_bit_offset);
+	  return is_symbolic
+		   ? region_offset::make_symbolic (iter_region,
+						   accum_sym_bit_offset)
+		   : region_offset::make_concrete (iter_region,
+						   accum_bit_offset);
 	}
     }
-  return region_offset::make_concrete (iter_region, accum_bit_offset);
+
+  return is_symbolic ? region_offset::make_symbolic (iter_region,
+						     accum_sym_bit_offset)
+		     : region_offset::make_concrete (iter_region,
+						     accum_bit_offset);
 }
 
 /* Base implementation of region::get_relative_concrete_offset vfunc.  */
@@ -539,6 +569,14 @@ bool
 region::get_relative_concrete_offset (bit_offset_t *) const
 {
   return false;
+}
+
+/* Base implementation of region::get_relative_symbolic_offset vfunc.  */
+
+const svalue *
+region::get_relative_symbolic_offset (region_model_manager *mgr) const
+{
+  return mgr->get_or_create_unknown_svalue (integer_type_node);
 }
 
 /* Attempt to get the position and size of this region expressed as a
@@ -1316,6 +1354,22 @@ field_region::get_relative_concrete_offset (bit_offset_t *out) const
   return true;
 }
 
+
+/* Implementation of region::get_relative_symbolic_offset vfunc
+   for field_region.  */
+
+const svalue *
+field_region::get_relative_symbolic_offset (region_model_manager *mgr) const
+{
+  bit_offset_t out;
+  if (get_relative_concrete_offset (&out))
+    {
+      tree cst_tree = wide_int_to_tree (integer_type_node, out);
+      return mgr->get_or_create_constant_svalue (cst_tree);
+    }
+  return mgr->get_or_create_unknown_svalue (integer_type_node);
+}
+
 /* class element_region : public region.  */
 
 /* Implementation of region::accept vfunc for element_region.  */
@@ -1382,6 +1436,31 @@ element_region::get_relative_concrete_offset (bit_offset_t *out) const
   return false;
 }
 
+/* Implementation of region::get_relative_symbolic_offset vfunc
+   for element_region.  */
+
+const svalue *
+element_region::get_relative_symbolic_offset (region_model_manager *mgr) const
+{
+  tree elem_type = get_type ();
+
+  /* First, use int_size_in_bytes, to reject the case where we
+     have an incomplete type, or a non-constant value.  */
+  HOST_WIDE_INT hwi_byte_size = int_size_in_bytes (elem_type);
+  if (hwi_byte_size > 0)
+	  {
+      offset_int element_bit_size
+	= hwi_byte_size << LOG2_BITS_PER_UNIT;
+      tree element_bit_size_tree = wide_int_to_tree (integer_type_node,
+						     element_bit_size);
+      const svalue *bit_size_sval
+	= mgr->get_or_create_constant_svalue (element_bit_size_tree);
+      return mgr->get_or_create_binop (integer_type_node, MULT_EXPR,
+				       m_index, bit_size_sval);
+    }
+  return mgr->get_or_create_unknown_svalue (integer_type_node);
+}
+
 /* class offset_region : public region.  */
 
 /* Implementation of region::accept vfunc for offset_region.  */
@@ -1436,6 +1515,19 @@ offset_region::get_relative_concrete_offset (bit_offset_t *out) const
       return true;
     }
   return false;
+}
+
+/* Implementation of region::get_relative_symbolic_offset vfunc
+   for offset_region.  */
+
+const svalue *
+offset_region::get_relative_symbolic_offset (region_model_manager *mgr) const
+{
+  tree bits_per_unit_tree = build_int_cst (integer_type_node, BITS_PER_UNIT);
+  const svalue *bits_per_unit_sval
+    = mgr->get_or_create_constant_svalue (bits_per_unit_tree);
+  return mgr->get_or_create_binop (integer_type_node, MULT_EXPR,
+				   m_byte_offset, bits_per_unit_sval);
 }
 
 /* Implementation of region::get_byte_size_sval vfunc for offset_region.  */
@@ -1671,6 +1763,18 @@ bit_range_region::get_relative_concrete_offset (bit_offset_t *out) const
 {
   *out = m_bits.get_start_bit_offset ();
   return true;
+}
+
+/* Implementation of region::get_relative_symbolic_offset vfunc for
+   bit_range_region.  */
+
+const svalue *
+bit_range_region::get_relative_symbolic_offset (region_model_manager *mgr)
+  const
+{
+  tree start_bit_tree = wide_int_to_tree (integer_type_node,
+					  m_bits.get_start_bit_offset ());
+  return mgr->get_or_create_constant_svalue (start_bit_tree);
 }
 
 /* class var_arg_region : public region.  */
