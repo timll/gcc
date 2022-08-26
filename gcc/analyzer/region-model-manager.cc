@@ -1936,9 +1936,9 @@ public:
     bool base_folded = is_folded (sval->get_base_svalue ());
     bool iter_folded = is_folded (sval->get_iter_svalue ());
     if (base_folded && !iter_folded)
-      m_map.insert (std::make_pair (sval, m_map[sval->get_base_svalue ()]));
+      insert (sval, m_map[sval->get_base_svalue ()]);
     else if (!base_folded && iter_folded)
-      m_map.insert (std::make_pair (sval, m_map[sval->get_iter_svalue ()]));
+      insert (sval, m_map[sval->get_iter_svalue ()]);
     else if (base_folded && iter_folded)
       {
 	if (m_mode == folding_mode::FM_UB)
@@ -2019,16 +2019,17 @@ private:
     if (!m_cm->get_equiv_class_by_svalue (sval, &id))
       return;
 
+    /* If we have an equivalence class,use that.  */ 
+    if (tree cst = id.get_obj (*m_cm).get_any_constant ())
+    {
+      const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
+      insert (sval, cst_sval);
+      return;
+    }
+
     switch (m_mode)
     {
     case folding_mode::FM_EQ:
-      {
-	if (tree cst = id.get_obj (*m_cm).get_any_constant ())
-	{
-	  const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
-	  insert (sval, cst_sval);
-	}
-      }
       break;
     case folding_mode::FM_UB:
       {
@@ -2072,7 +2073,7 @@ private:
   }
 
   const svalue *m_root_sval;
-  const folding_mode m_mode;
+  folding_mode m_mode;
   region_model_manager *m_mgr;
   constraint_manager *m_cm;
   /* Map svalues to it's folded counterpart.  */

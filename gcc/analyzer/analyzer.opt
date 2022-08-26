@@ -110,6 +110,10 @@ Wanalyzer-malloc-leak
 Common Var(warn_analyzer_malloc_leak) Init(1) Warning
 Warn about code paths in which a heap-allocated pointer leaks.
 
+Wanalyzer-maybe-out-of-bounds
+Common Var(warn_analyzer_out_of_bounds) Init(1) Warning
+Warn about code paths in which a write or read to a buffer might be out-of-bounds.
+
 Wanalyzer-mismatching-deallocation
 Common Var(warn_analyzer_mismatching_deallocation) Init(1) Warning
 Warn about code paths in which the wrong deallocation function is called.

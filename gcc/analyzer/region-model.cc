@@ -74,6 +74,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
+#include <set>
 
 #if ENABLE_ANALYZER
 
@@ -1274,9 +1275,9 @@ class out_of_bounds : public pending_diagnostic_subclass<out_of_bounds>
 {
 public:
   out_of_bounds (const region *reg, tree diag_arg,
-		 byte_range out_of_bounds_range)
+		 byte_range out_of_bounds_range, bool maybe)
   : m_reg (reg), m_diag_arg (diag_arg),
-    m_out_of_bounds_range (out_of_bounds_range)
+    m_out_of_bounds_range (out_of_bounds_range), m_maybe (maybe)
   {}
 
   const char *get_kind () const final override
@@ -1293,6 +1294,8 @@ public:
 
   int get_controlling_option () const final override
   {
+    if (m_maybe)
+      return OPT_Wanalyzer_maybe_out_of_bounds;
     return OPT_Wanalyzer_out_of_bounds;
   }
 
@@ -1305,6 +1308,7 @@ protected:
   const region *m_reg;
   tree m_diag_arg;
   byte_range m_out_of_bounds_range;
+  bool m_maybe;
 };
 
 /* Abstract subclass to complaing about out-of-bounds
@@ -1314,8 +1318,8 @@ class past_the_end : public out_of_bounds
 {
 public:
   past_the_end (const region *reg, tree diag_arg, byte_range range,
-		tree byte_bound)
-  : out_of_bounds (reg, diag_arg, range), m_byte_bound (byte_bound)
+		tree byte_bound, bool maybe)
+  : out_of_bounds (reg, diag_arg, range, maybe), m_byte_bound (byte_bound)
   {}
 
   bool operator== (const past_the_end &other) const
@@ -1345,8 +1349,8 @@ class buffer_overflow : public past_the_end
 {
 public:
   buffer_overflow (const region *reg, tree diag_arg,
-		   byte_range range, tree byte_bound)
-  : past_the_end (reg, diag_arg, range, byte_bound)
+		   byte_range range, tree byte_bound, bool maybe)
+  : past_the_end (reg, diag_arg, range, byte_bound, maybe)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1430,8 +1434,8 @@ class buffer_overread : public past_the_end
 {
 public:
   buffer_overread (const region *reg, tree diag_arg,
-		   byte_range range, tree byte_bound)
-  : past_the_end (reg, diag_arg, range, byte_bound)
+		   byte_range range, tree byte_bound, bool maybe)
+  : past_the_end (reg, diag_arg, range, byte_bound, maybe)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1498,8 +1502,9 @@ public:
 class buffer_underflow : public out_of_bounds
 {
 public:
-  buffer_underflow (const region *reg, tree diag_arg, byte_range range)
-  : out_of_bounds (reg, diag_arg, range)
+  buffer_underflow (const region *reg, tree diag_arg,
+                    byte_range range, bool maybe)
+  : out_of_bounds (reg, diag_arg, range, maybe)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1547,8 +1552,9 @@ public:
 class buffer_underread : public out_of_bounds
 {
 public:
-  buffer_underread (const region *reg, tree diag_arg, byte_range range)
-  : out_of_bounds (reg, diag_arg, range)
+  buffer_underread (const region *reg, tree diag_arg,
+                    byte_range range, bool maybe)
+  : out_of_bounds (reg, diag_arg, range, maybe)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1591,6 +1597,94 @@ public:
   }
 };
 
+static bool
+structural_equivalent (const svalue *a, const svalue *b)
+{
+  switch (a->get_kind ())
+    {
+    default:
+      return false;
+    case SK_CONSTANT:
+    case SK_CONJURED:
+    case SK_INITIAL:
+      return a == b;
+    case SK_UNARYOP:
+      {
+        const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
+        if (const unaryop_svalue *un_b = dyn_cast <const unaryop_svalue *> (b))
+          return un_a->get_op () == un_b->get_op ()
+                 && structural_equivalent (un_a->get_arg (),
+                                           un_b->get_arg ());
+      }
+      return false;
+    case SK_BINOP:
+      {
+        const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
+        const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b);
+        return bin_b && bin_a->get_op () == bin_b->get_op ()
+               && structural_equivalent (bin_a->get_arg0 (),
+                                        bin_b->get_arg0 ())
+               && structural_equivalent (bin_a->get_arg1 (),
+                                        bin_b->get_arg1 ());
+      }
+      return false;
+    }
+}
+
+class symbolic_oob
+: public pending_diagnostic_subclass<symbolic_oob>
+{
+public:
+  symbolic_oob ()
+  {}
+
+  const char *get_kind () const final override
+  {
+    return "symbolic_oob";
+  }
+
+  bool operator== (const symbolic_oob &other) const
+  {
+    return true;
+  }
+
+  int get_controlling_option () const final override
+  {
+    return OPT_Wanalyzer_out_of_bounds;
+  }
+
+  bool emit (rich_location *rich_loc) final override
+  {
+    return warning_at (rich_loc, get_controlling_option (),
+                       "maybe out-of-bounds");
+  }
+
+  label_text describe_final_event (const evdesc::final_event &ev) final override
+  {
+    return ev.formatted_print ("oob by 1 here");
+  }
+};
+
+void region_model::check_symbolic_bounds (const region *base_reg,
+                                          const svalue *sym_bit_offset,
+                                          const svalue *capacity,
+                                          enum access_direction dir,
+                                          region_model_context *ctxt) const
+{
+  gcc_assert (ctxt);
+
+  const svalue *bpu
+    = m_mgr->get_or_create_constant_svalue (build_int_cst (integer_type_node,
+                                                           BITS_PER_UNIT));
+  const svalue *capacity_in_bits
+    = m_mgr->get_or_create_binop (integer_type_node, MULT_EXPR, capacity, bpu);
+  
+  if (structural_equivalent (sym_bit_offset, capacity_in_bits))
+    {
+      ctxt->warn (new symbolic_oob ());
+    }
+}
+
 /* May complain when the access on REG is out-of-bounds.  */
 
 void region_model::check_region_bounds (const region *reg,
@@ -1608,22 +1702,57 @@ void region_model::check_region_bounds (const region *reg,
   if (base_reg->symbolic_p ())
     return;
 
-  byte_offset_t offset_unsigned;
-  if (reg_offset.symbolic_p ())
+  bool maybe = false;
+
+  /* Find out how many bytes were accessed.  */
+  const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
+  tree num_bytes_tree = num_bytes_sval->maybe_get_constant ();
+  if (!num_bytes_tree || TREE_CODE (num_bytes_tree) != INTEGER_CST)
     {
-      /* Try to fold the symbolic offset using the constraints.  */
+      /* Try to use the constraints to get an upper bound.  */
       const constant_svalue *folded
-	= m_mgr->maybe_fold_svalue (reg_offset.get_sym_bit_offset (),
-				    folding_mode::FM_EQ, m_constraints);
-      if (!folded)
-	return;
-      offset_unsigned
-	= wi::to_offset (folded->get_constant ()) >> LOG2_BITS_PER_UNIT;
+	      = m_mgr->maybe_fold_svalue (num_bytes_sval, folding_mode::FM_UB,
+                                    m_constraints);
+      if (folded)
+        {
+          maybe = true;
+          num_bytes_tree = folded->get_constant ();
+        }
+      else
+        {
+          /* If we do not know how many bytes were read/written,
+            assume that at least one byte was read/written.  */
+          num_bytes_tree = integer_one_node;
+        }
+    }
+
+  const svalue *capacity = get_capacity (base_reg);
+
+  byte_offset_t offset_unsigned;
+  if (!reg_offset.symbolic_p ())
+    {
+      /* We do have a concrete offset, so use that.  */
+      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
     }
   else
     {
-      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+      /* Try to use the constraints to get an upper bound.  */
+      const constant_svalue *folded
+	= m_mgr->maybe_fold_svalue (reg_offset.get_sym_bit_offset (),
+				    folding_mode::FM_UB, m_constraints);
+      if (!folded)
+        {
+          /* If even the constraints can't give us a constant, we try to
+             reason on symbolic values.  */
+          check_symbolic_bounds (base_reg, reg_offset.get_sym_bit_offset (),
+                                 capacity, dir, ctxt);
+          return;
+        }
+      maybe = true;
+      offset_unsigned
+	= wi::to_offset (folded->get_constant ()) >> LOG2_BITS_PER_UNIT;
     }
+
   /* The constant offset from a pointer is represented internally as a sizetype
      but should be interpreted as a signed value here.  The statement below
      converts the offset to a signed integer with the same precision the
@@ -1632,46 +1761,31 @@ void region_model::check_region_bounds (const region *reg,
      For example, this is needed for out-of-bounds-3.c test1 to pass when
      compiled with a 64-bit gcc build targeting 32-bit systems.  */
   byte_offset_t offset
-    = offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
-
-  /* Find out how many bytes were accessed.  */
-  const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
-  tree num_bytes_tree = num_bytes_sval->maybe_get_constant ();
-  if (!num_bytes_tree || TREE_CODE (num_bytes_tree) != INTEGER_CST)
-    {
-      const constant_svalue *folded
-	= m_mgr->maybe_fold_svalue (num_bytes_sval, folding_mode::FM_EQ,
-				    m_constraints);
-      if (folded)
-	num_bytes_tree = folded->get_constant ();
-      else
-	/* If we do not know how many bytes were read/written,
-	  assume that at least one byte was read/written.  */
-	num_bytes_tree = integer_one_node;
-    }
+    = (int) offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
 
   byte_range out (0, 0);
   /* NUM_BYTES_TREE should always be interpreted as unsigned.  */
-  byte_range read_bytes (offset, wi::to_offset (num_bytes_tree).to_uhwi ());
+  byte_offset_t num_bytes_unsigned
+    = (unsigned) wi::to_offset (num_bytes_tree).to_uhwi ();
+  byte_range read_bytes (offset, num_bytes_unsigned);
   /* If read_bytes has a subset < 0, we do have an underflow.  */
   if (read_bytes.falls_short_of_p (0, &out))
     {
-      tree diag_arg = get_representative_tree (reg->get_base_region ());
+      tree diag_arg = get_representative_tree (base_reg);
       switch (dir)
 	{
 	default:
 	  gcc_unreachable ();
 	  break;
 	case DIR_READ:
-	  ctxt->warn (new buffer_underread (reg, diag_arg, out));
+	  ctxt->warn (new buffer_underread (reg, diag_arg, out, maybe));
 	  break;
 	case DIR_WRITE:
-	  ctxt->warn (new buffer_underflow (reg, diag_arg, out));
+	  ctxt->warn (new buffer_underflow (reg, diag_arg, out, maybe));
 	  break;
 	}
     }
 
-  const svalue *capacity = get_capacity (base_reg);
   tree cst_capacity_tree = capacity->maybe_get_constant ();
   if (!cst_capacity_tree || TREE_CODE (cst_capacity_tree) != INTEGER_CST)
     return;
@@ -1690,10 +1804,10 @@ void region_model::check_region_bounds (const region *reg,
 	  gcc_unreachable ();
 	  break;
 	case DIR_READ:
-	  ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound));
+	  ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound, maybe));
 	  break;
 	case DIR_WRITE:
-	  ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound));
+	  ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound, maybe));
 	  break;
 	}
     }
