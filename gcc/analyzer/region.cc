@@ -536,10 +536,9 @@ region::calc_offset () const
 /* Base implementation of region::get_relative_concrete_offset vfunc.  */
 
 bool
-region::get_relative_concrete_offset (bit_offset_t *out) const
+region::get_relative_concrete_offset (bit_offset_t *) const
 {
-  *out = (int) 0;
-  return true;
+  return false;
 }
 
 /* Attempt to get the position and size of this region expressed as a
@@ -1066,15 +1065,6 @@ symbolic_region::dump_to_pp (pretty_printer *pp, bool simple) const
     }
 }
 
-/* Implementation of region::get_relative_concrete_offset vfunc for
-   symbolic_region.  */
-
-bool
-symbolic_region::get_relative_concrete_offset (bit_offset_t *) const
-{
-  return false;
-}
-
 /* class decl_region : public region.  */
 
 /* Implementation of region::dump_to_pp vfunc for decl_region.  */
@@ -1572,7 +1562,8 @@ cast_region::dump_to_pp (pretty_printer *pp, bool simple) const
 bool
 cast_region::get_relative_concrete_offset (bit_offset_t *out) const
 {
-  return m_original_region->get_relative_concrete_offset (out);
+  *out = (int) 0;
+  return true;
 }
 
 /* class heap_allocated_region : public region.  */
