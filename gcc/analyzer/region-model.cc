@@ -1597,6 +1597,83 @@ public:
   }
 };
 
+// class expr
+// {
+
+// }
+
+// class binop_operands
+// {
+//   void add (const svalue *sval)
+//   {
+//     operands.safe_push (sval);
+//   }
+
+//   auto_vec<const svalue *> operands;
+//   tree_code op;
+// }
+
+// static void
+// recurse_ops (tree_code op, binop_operands *bops, const svalue *sval)
+// {
+//   if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
+//     if (binop->get_op () == op)
+//       {
+//         recurse_ops (op, bops, binop->get_arg0 ());
+//         recurse_ops (op, bops, binop->get_arg1 ());
+//         return;
+//       }
+//   bops->add (sval);
+// }
+
+// static void
+// same_level_operands (const binop_svalue *binop)
+// {
+//   binop_operands bops;
+//   recurse_ops (binop->get_op (), &bops, binop);
+// }
+
+
+static void
+recurse_ops (tree type, enum tree_code op, svalue_set *set, const svalue *sval)
+{
+  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
+    {
+      if (binop->get_type () == type && binop->get_op () == op)
+        {
+          recurse_ops (type, op, set, binop->get_arg0 ());
+          recurse_ops (type, op, set, binop->get_arg1 ());
+          return;
+        }
+    }
+
+  set->add (sval);
+}
+
+static void
+recurse_ops (svalue_set *set, const svalue *sval)
+{
+  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
+    {
+      recurse_ops (binop->get_type (), binop->get_op (), set, binop->get_arg0 ());
+      recurse_ops (binop->get_type (), binop->get_op (), set, binop->get_arg1 ());
+      return;
+    }
+
+  set->add (sval);
+}
+
+static bool
+is_positive_svalue (const svalue *sval)
+{
+  if (tree cst = sval->maybe_get_constant ())
+    {
+      tree cmp = fold_binary (GT_EXPR, boolean_type_node, cst, integer_zero_node);
+      return cmp == boolean_true_node;
+    }
+  return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
+}
+
 static bool
 structural_equivalent (const svalue *a, const svalue *b)
 {
@@ -1620,12 +1697,32 @@ structural_equivalent (const svalue *a, const svalue *b)
     case SK_BINOP:
       {
         const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
-        const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b);
-        return bin_b && bin_a->get_op () == bin_b->get_op ()
-               && structural_equivalent (bin_a->get_arg0 (),
-                                        bin_b->get_arg0 ())
-               && structural_equivalent (bin_a->get_arg1 (),
-                                        bin_b->get_arg1 ());
+        /* Reorder operands on commutative binary expressions.  */ 
+        if (commutative_tree_code (bin_a->get_op ()))
+          {
+            svalue_set ops_a;
+            svalue_set ops_b;
+            recurse_ops (bin_a->get_type (), bin_a->get_op (), &ops_a, a);
+            recurse_ops (bin_a->get_type (), bin_a->get_op (), &ops_b, b);
+
+            for (svalue_set::iterator iter = ops_a.begin ();
+                 iter != ops_a.end (); ++iter)
+              {
+                if (ops_b.contains (*iter))
+                  ops_b.remove (*iter);
+                else
+                  /* If B is missing an operand, we give up.  */ 
+                  return false;
+              }
+
+            /* Only return true if all additional operands are known to be positive.  */
+            svalue_set additional_ops = ops_b;
+            for (svalue_set::iterator iter = additional_ops.begin();
+                 iter != additional_ops.end (); ++iter)
+              if (!is_positive_svalue (*iter))
+                return false;
+            return true;
+          }
       }
       return false;
     }
