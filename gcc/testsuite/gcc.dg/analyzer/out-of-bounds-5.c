@@ -47,7 +47,10 @@ void test4 (size_t size, size_t op)
 }
 
 /* Test where the offset itself is not out-of-bounds
-   but multiple bytes are read.  */
+   but multiple bytes are read.
+   
+   TODO: these three don't work because my current algo bails out if I do a
+         binop expr of sym_bit_offset and num_bits_sval.  */
 
 void test5 (size_t size)
 {
