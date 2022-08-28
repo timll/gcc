@@ -1597,142 +1597,15 @@ public:
   }
 };
 
-// class expr
-// {
-
-// }
-
-// class binop_operands
-// {
-//   void add (const svalue *sval)
-//   {
-//     operands.safe_push (sval);
-//   }
-
-//   auto_vec<const svalue *> operands;
-//   tree_code op;
-// }
-
-// static void
-// recurse_ops (tree_code op, binop_operands *bops, const svalue *sval)
-// {
-//   if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
-//     if (binop->get_op () == op)
-//       {
-//         recurse_ops (op, bops, binop->get_arg0 ());
-//         recurse_ops (op, bops, binop->get_arg1 ());
-//         return;
-//       }
-//   bops->add (sval);
-// }
-
-// static void
-// same_level_operands (const binop_svalue *binop)
-// {
-//   binop_operands bops;
-//   recurse_ops (binop->get_op (), &bops, binop);
-// }
-
-
-static void
-recurse_ops (tree type, enum tree_code op, svalue_set *set, const svalue *sval)
-{
-  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
-    {
-      if (binop->get_type () == type && binop->get_op () == op)
-        {
-          recurse_ops (type, op, set, binop->get_arg0 ());
-          recurse_ops (type, op, set, binop->get_arg1 ());
-          return;
-        }
-    }
-
-  set->add (sval);
-}
-
-static void
-recurse_ops (svalue_set *set, const svalue *sval)
-{
-  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
-    {
-      recurse_ops (binop->get_type (), binop->get_op (), set, binop->get_arg0 ());
-      recurse_ops (binop->get_type (), binop->get_op (), set, binop->get_arg1 ());
-      return;
-    }
-
-  set->add (sval);
-}
-
-static bool
-is_positive_svalue (const svalue *sval)
-{
-  if (tree cst = sval->maybe_get_constant ())
-    {
-      tree cmp = fold_binary (GT_EXPR, boolean_type_node, cst, integer_zero_node);
-      return cmp == boolean_true_node;
-    }
-  return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
-}
-
-static bool
-structural_equivalent (const svalue *a, const svalue *b)
-{
-  switch (a->get_kind ())
-    {
-    default:
-      return false;
-    case SK_CONSTANT:
-    case SK_CONJURED:
-    case SK_INITIAL:
-      return a == b;
-    case SK_UNARYOP:
-      {
-        const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
-        if (const unaryop_svalue *un_b = dyn_cast <const unaryop_svalue *> (b))
-          return un_a->get_op () == un_b->get_op ()
-                 && structural_equivalent (un_a->get_arg (),
-                                           un_b->get_arg ());
-      }
-      return false;
-    case SK_BINOP:
-      {
-        const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
-        /* Reorder operands on commutative binary expressions.  */ 
-        if (commutative_tree_code (bin_a->get_op ()))
-          {
-            svalue_set ops_a;
-            svalue_set ops_b;
-            recurse_ops (bin_a->get_type (), bin_a->get_op (), &ops_a, a);
-            recurse_ops (bin_a->get_type (), bin_a->get_op (), &ops_b, b);
-
-            for (svalue_set::iterator iter = ops_a.begin ();
-                 iter != ops_a.end (); ++iter)
-              {
-                if (ops_b.contains (*iter))
-                  ops_b.remove (*iter);
-                else
-                  /* If B is missing an operand, we give up.  */ 
-                  return false;
-              }
-
-            /* Only return true if all additional operands are known to be positive.  */
-            svalue_set additional_ops = ops_b;
-            for (svalue_set::iterator iter = additional_ops.begin();
-                 iter != additional_ops.end (); ++iter)
-              if (!is_positive_svalue (*iter))
-                return false;
-            return true;
-          }
-      }
-      return false;
-    }
-}
+/* Diagnostic to complain about out-of-bounds read/writes where
+   the value is symbolic.  */
 
 class symbolic_oob
-: public pending_diagnostic_subclass<symbolic_oob>
+  : public pending_diagnostic_subclass<symbolic_oob>
 {
 public:
-  symbolic_oob ()
+  symbolic_oob (const region *reg, enum access_direction dir)
+    : m_reg (reg), m_dir (dir)
   {}
 
   const char *get_kind () const final override
@@ -1742,12 +1615,12 @@ public:
 
   bool operator== (const symbolic_oob &other) const
   {
-    return true;
+    return m_dir == other.m_dir;
   }
 
   int get_controlling_option () const final override
   {
-    return OPT_Wanalyzer_out_of_bounds;
+    return OPT_Wanalyzer_maybe_out_of_bounds;
   }
 
   bool emit (rich_location *rich_loc) final override
@@ -1758,9 +1631,186 @@ public:
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
   {
-    return ev.formatted_print ("oob by 1 here");
+    return ev.formatted_print ("access is larger than the capacity");
   }
+
+  void mark_interesting_stuff (interesting_t *interest) final override
+  {
+    interest->add_region_creation (m_reg);
+  }
+
+private:
+  const region *m_reg;
+  enum access_direction m_dir;
 };
+
+/* Add all operands of SVAL within a series of binary expressions with
+   the same commutative operator OP to SET.  */
+
+static void
+find_all_operands (enum tree_code op, svalue_set *set, const svalue *sval)
+{
+  gcc_assert (commutative_tree_code (op));
+
+  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
+    {
+      if (binop->get_op () == op)
+        {
+          find_all_operands (op, set, binop->get_arg0 ());
+          find_all_operands (op, set, binop->get_arg1 ());
+          return;
+        }
+    }
+  set->add (sval);
+}
+
+/* Return true if SVAL is definitely positive.  */
+
+static bool
+is_positive_svalue (const svalue *sval)
+{
+  if (tree cst = sval->maybe_get_constant ())
+    {
+      tree cmp = fold_binary (GT_EXPR, boolean_type_node, cst, integer_zero_node);
+      return cmp == boolean_true_node;
+    }
+  else if (const unaryop_svalue *unop_sval
+            = dyn_cast <const unaryop_svalue *> (sval))
+    return is_positive_svalue (unop_sval->get_arg ());
+  return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
+}
+
+/* Return the accumulated value of all elements of SET combined with OP.  */ 
+
+static bit_size_t
+combine_all_constants (svalue_set *set, enum tree_code op)
+{
+  gcc_assert (op == PLUS_EXPR || op == MULT_EXPR);
+
+  bit_size_t accum = (int) 0;
+  for (svalue_set::iterator iter = set->begin (); iter != set->end (); ++iter)
+    {
+      if (tree cst = (*iter)->maybe_get_constant ())
+        {
+          if (op == PLUS_EXPR)
+            accum += wi::to_offset (cst);
+          else
+            accum *= wi::to_offset (cst);
+          set->remove (*iter);
+        }
+    }
+  return accum;
+}
+
+/* Return true if B is definitely larger than A.
+
+   Limitations:
+    * Assumes that B is of the same svalue subclass as A except
+      for binary expressions.
+    * Only handles inequality for PLUS_EXPR and MULT_EXPR. For all other
+      operands, structural equality is used instead.
+    * Can not distinguish integers casted to unsigned values from integers
+      used in pointer arithmetic.  */
+
+static bool
+symbolic_is_greater_equal (const svalue *a, const svalue *b)
+{
+  switch (a->get_kind ())
+    {
+    default:
+      return false;
+    case SK_CONJURED:
+    case SK_INITIAL:
+      return a == b;
+    case SK_CONSTANT:
+      {
+        tree cst_a = a->maybe_get_constant ();
+        tree cst_b = b->maybe_get_constant ();
+        if (cst_a && cst_b)
+          {
+            tree cmp = fold_binary (GE_EXPR, boolean_type_node, cst_a, cst_b);
+            return cmp == boolean_true_node;
+          }
+      }
+      return false;
+    case SK_UNARYOP:
+      {
+        const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
+        if (const unaryop_svalue *un_b = dyn_cast <const unaryop_svalue *> (b))
+          return un_a->get_op () == un_b->get_op ()
+                 && pending_diagnostic::same_tree_p (un_a->get_type (),
+                                                     un_b->get_type ())
+                 && symbolic_is_greater_equal (un_a->get_arg (),
+                                               un_b->get_arg ());
+      }
+      return false;
+    case SK_BINOP:
+      {
+        const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
+        tree_code op = bin_a->get_op ();
+        if (op == PLUS_EXPR || op == MULT_EXPR)
+          {
+            svalue_set ops_a;
+            svalue_set ops_b;
+            find_all_operands (op, &ops_a, a);
+            find_all_operands (op, &ops_b, b);
+
+            /* Eliminate non-constant operands on both sides.  */
+            for (svalue_set::iterator iter = ops_a.begin ();
+                 iter != ops_a.end (); ++iter)
+              {
+                const svalue *cpy = *iter;
+                if (ops_b.contains (cpy))
+                  {
+                    ops_a.remove (cpy);
+                    ops_b.remove (cpy);
+                  }
+                else if (cpy->get_kind () == SK_BINOP
+                         || cpy->get_kind () == SK_UNARYOP)
+                  {
+                    for (svalue_set::iterator iter_b = ops_b.begin ();
+                        iter_b != ops_b.end (); ++iter_b)
+                      if (symbolic_is_greater_equal (cpy, *iter_b))
+                        {
+                          ops_a.remove (cpy);
+                          ops_b.remove (*iter_b);
+                          break;
+                        }
+                  }
+              }
+
+            /* Remove all constants that are left and add them together.  */
+            bit_size_t a_csts = combine_all_constants (&ops_a, op);
+            bit_size_t b_csts = combine_all_constants (&ops_b, op);
+
+            /* Given that we have eliminated all operands in B, we can compare
+               whether A is larger.  */
+            if (ops_b.elements () == 0 && a_csts >= b_csts)
+              {
+                /* If any remaining operand in A could be negative, we can not
+                   reason about the inequality anymore.  */
+                for (svalue_set::iterator iter = ops_a.begin ();
+                     iter != ops_a.end (); ++iter)
+                  if (!is_positive_svalue (*iter))
+                    return false;
+
+                /* A is definitely larger.  */
+                return true;
+              }
+          }
+        else if (const binop_svalue *bin_b
+                  = dyn_cast <const binop_svalue *> (b))
+          return bin_a->get_op () == bin_b->get_op ()
+                 && pending_diagnostic::same_tree_p (bin_a->get_type (),
+                                                     bin_b->get_type ())
+                 && symbolic_is_greater_equal (bin_a->get_arg0 (),
+                                               bin_b->get_arg0 ())
+                 && symbolic_is_greater_equal (bin_a->get_arg1 (),
+                                               bin_b->get_arg1 ());
+      }
+      return false;
+    }
+}
 
 void region_model::check_symbolic_bounds (const region *base_reg,
                                           const svalue *sym_bit_offset,
@@ -1770,15 +1820,16 @@ void region_model::check_symbolic_bounds (const region *base_reg,
 {
   gcc_assert (ctxt);
 
-  const svalue *bpu
+  const svalue *bits_per_unit_sval
     = m_mgr->get_or_create_constant_svalue (build_int_cst (integer_type_node,
                                                            BITS_PER_UNIT));
   const svalue *capacity_in_bits
-    = m_mgr->get_or_create_binop (integer_type_node, MULT_EXPR, capacity, bpu);
-  
-  if (structural_equivalent (sym_bit_offset, capacity_in_bits))
+    = m_mgr->get_or_create_binop (integer_type_node, MULT_EXPR,
+                                  capacity, bits_per_unit_sval);
+
+  if (symbolic_is_greater_equal (sym_bit_offset, capacity_in_bits))
     {
-      ctxt->warn (new symbolic_oob ());
+      ctxt->warn (new symbolic_oob (base_reg, dir));
     }
 }
 

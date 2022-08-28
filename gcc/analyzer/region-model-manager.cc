@@ -1933,27 +1933,13 @@ public:
 
   void visit_widening_svalue (const widening_svalue *sval) final override
   {
-    bool base_folded = is_folded (sval->get_base_svalue ());
-    bool iter_folded = is_folded (sval->get_iter_svalue ());
-    if (base_folded && !iter_folded)
-      insert (sval, m_map[sval->get_base_svalue ()]);
-    else if (!base_folded && iter_folded)
+    if (find_replacement (sval))
+      return;
+
+    if (is_folded (sval->get_iter_svalue ()))
       insert (sval, m_map[sval->get_iter_svalue ()]);
-    else if (base_folded && iter_folded)
-      {
-	if (m_mode == folding_mode::FM_UB)
-	  {
-	    const svalue *ub = get_larger (sval->get_base_svalue (),
-					   sval->get_iter_svalue ());
-	    insert (sval, ub);
-	  }
-	else if (m_mode == folding_mode::FM_LB)
-	  {
-	    const svalue *lb = get_lesser (sval->get_base_svalue (),
-					   sval->get_iter_svalue ());
-	    insert (sval, lb);
-	  }
-      }
+    else if (is_folded (sval->get_base_svalue ()))
+      insert (sval, m_map[sval->get_base_svalue ()]);
   }
 
   void visit_unaryop_svalue (const unaryop_svalue *sval)
@@ -2013,24 +1999,25 @@ public:
   }
 
 private:
-  void find_replacement (const svalue *sval)
+  inline bool is_folded (const svalue *sval)
+  {
+    return m_map.count (sval) == 1;
+  }
+
+  inline void insert (const svalue *sval, const svalue *folded)
+  {
+    if (folded)
+      m_map.insert (std::make_pair (sval, folded));
+  }
+
+  bool find_replacement (const svalue *sval)
   {
     equiv_class_id id (-1);
     if (!m_cm->get_equiv_class_by_svalue (sval, &id))
-      return;
-
-    /* If we have an equivalence class,use that.  */ 
-    if (tree cst = id.get_obj (*m_cm).get_any_constant ())
-    {
-      const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
-      insert (sval, cst_sval);
-      return;
-    }
+      return false;
 
     switch (m_mode)
     {
-    case folding_mode::FM_EQ:
-      break;
     case folding_mode::FM_UB:
       {
 	range bounds = m_cm->get_ec_bounds (id);
@@ -2040,6 +2027,7 @@ private:
 	    const svalue* cst_sval
 	      = m_mgr->get_or_create_constant_svalue (ub_cst);
 	    insert (sval, cst_sval);
+	    return true;
 	  }
       }
       break;
@@ -2052,24 +2040,25 @@ private:
 	    const svalue* cst_sval
 	      = m_mgr->get_or_create_constant_svalue (lb_cst);
 	    insert (sval, cst_sval);
+	    return true;
 	  }
       }
+      break;
+    case folding_mode::FM_EQ:
       break;
     default:
       gcc_unreachable ();
       break;
     }
-  }
 
-  inline bool is_folded (const svalue *sval)
-  {
-    return m_map.count (sval) == 1;
-  }
+    if (tree cst = id.get_obj (*m_cm).get_any_constant ())
+    {
+      const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
+      insert (sval, cst_sval);
+      return true;
+    }
 
-  inline void insert (const svalue *sval, const svalue *folded)
-  {
-    if (folded)
-      m_map.insert (std::make_pair (sval, folded));
+    return false;
   }
 
   const svalue *m_root_sval;
