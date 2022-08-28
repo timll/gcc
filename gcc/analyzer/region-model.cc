@@ -1680,8 +1680,6 @@ is_positive_svalue (const svalue *sval)
   return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
 }
 
-/* Return the accumulated value of all elements of SET combined with OP.  */ 
-
 static bit_size_t
 combine_all_constants (svalue_set *set, enum tree_code op)
 {
@@ -1703,6 +1701,10 @@ combine_all_constants (svalue_set *set, enum tree_code op)
 }
 
 /* Return true if B is definitely larger than A.
+
+   This function does put up the inequality A > B and recursively try to
+   eliminiate all operands of B that are also in A. If A has any non-constant
+   operand left, the function gives up.
 
    Limitations:
     * Assumes that B is of the same svalue subclass as A except
@@ -1747,6 +1749,7 @@ symbolic_is_greater_equal (const svalue *a, const svalue *b)
     case SK_BINOP:
       {
         const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
+        const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b);
         tree_code op = bin_a->get_op ();
         if (op == PLUS_EXPR || op == MULT_EXPR)
           {
@@ -1760,7 +1763,9 @@ symbolic_is_greater_equal (const svalue *a, const svalue *b)
                  iter != ops_a.end (); ++iter)
               {
                 const svalue *cpy = *iter;
-                if (ops_b.contains (cpy))
+                /* Make sure we only eliminate in two binops
+                   if both do have the same operator. */
+                if (ops_b.contains (cpy) && (!bin_b || bin_b->get_op () == op))
                   {
                     ops_a.remove (cpy);
                     ops_b.remove (cpy);
@@ -1782,6 +1787,13 @@ symbolic_is_greater_equal (const svalue *a, const svalue *b)
             /* Remove all constants that are left and add them together.  */
             bit_size_t a_csts = combine_all_constants (&ops_a, op);
             bit_size_t b_csts = combine_all_constants (&ops_b, op);
+            
+            // if (ops_b.elements () == 1 && ops_a.elements () == 1)
+            //   {
+            //     tree cst_a = (*ops_b.begin ())->maybe_get_constant ();
+            //     tree cst_b = (*ops_b.begin ())->maybe_get_constant ();
+            //     if (cst_a && cst_b && )
+            //   }
 
             /* Given that we have eliminated all operands in B, we can compare
                whether A is larger.  */
@@ -1798,8 +1810,7 @@ symbolic_is_greater_equal (const svalue *a, const svalue *b)
                 return true;
               }
           }
-        else if (const binop_svalue *bin_b
-                  = dyn_cast <const binop_svalue *> (b))
+        else if (bin_b)
           return bin_a->get_op () == bin_b->get_op ()
                  && pending_diagnostic::same_tree_p (bin_a->get_type (),
                                                      bin_b->get_type ())
