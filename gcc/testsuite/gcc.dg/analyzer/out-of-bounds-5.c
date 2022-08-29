@@ -1,134 +1,62 @@
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
-#include <alloca.h>
-#include <stdint.h>
 
-/* Tests with symbolic values.  */
+/* Tests requiring folding constraints.  */
 
-void test1 (size_t size)
+int *test1 ()
 {
-  char *buf = __builtin_malloc (size);
-  if (!buf) return;
-
-  buf[size] = '\0'; /* { dg-warning "" } */
-  free (buf);
-}
-
-void test2 (size_t size)
-{
-  char *buf = __builtin_malloc (size);
-  if (!buf) return;
-
-  buf[size + 1] = '\0'; /* { dg-warning "" } */
-  free (buf);
-}
-
-/* Test commutativeness.  */
-
-void test3 (size_t size, size_t op)
-{
-  char *buf = __builtin_malloc (size);
-  if (!buf) return;
-
-  buf[size + op] = '\0'; /* { dg-warning "" } */
-  buf[op + size] = '\0'; /* { dg-warning "" } */
-  free (buf);
-}
-
-void test4 (size_t size, size_t op)
-{
-  char *buf = __builtin_malloc (op * size);
-  if (!buf) return;
-
-  buf[size * op] = '\0'; /* { dg-warning "" } */
-  buf[op * size] = '\0'; /* { dg-warning "" } */
-  free (buf);
-}
-
-/* Test where the offset itself is not out-of-bounds
-   but multiple bytes are read.
-   
-   TODO: these three don't work because my current algo bails out if I do a
-         binop expr of sym_bit_offset and num_bits_sval.  */
-
-void test5 (size_t size)
-{
-  int32_t *buf = __builtin_alloca (size + 7); /* { dg-warning "allocated buffer size is not a multiple of the pointee's size" } */
-  buf[size] = 42; /* { dg-warning "" } */
-}
-
-void test6 (size_t size, size_t offset)
-{
-  int src[size];
-  int dst[size];
-  memcpy (dst, src, size + offset); /* { dg-warning "" } */
-}
-
-void test7 (size_t size, size_t offset)
-{
-  int src[size];
-  int dst[size];
-  memcpy (dst, src, size + 1); /* { dg-warning "" } */
-}
-
-/* Test fallback on structural equality.  */
-
-void test8 (size_t size, size_t offset)
-{
-  int buf[size - offset];
-  buf[size - offset] = 42; /* { dg-warning "" } */
-}
-
-void test9 (size_t size)
-{
-  int buf[size - 1];
-  buf[size - 1] = 42; /* { dg-warning "" } */
-}
-
-/* Test for no false-positives.  */
-
-void test10 (size_t size, size_t offset)
-{
-  int buf[size];
-  buf[offset] = 42;
-}
-
-void test11 (size_t size, int offset)
-{
-  int buf[size];
-  /* We don't know whether offset is positive or not.  */
-  buf[size + offset] = 42;
-}
-
-void test12 (size_t size, size_t offset, size_t offset2)
-{
-  int buf[size];
-  /* We don't know whether offset < offset2.  */
-  buf[size + offset - offset2] = 42;
-}
-
-void test13 (size_t a, size_t b)
-{
-  int buf[a * b];
-  /* We can't reason about a*b < a+b either.  */
-  buf[a + b] = 42;
-}
-
-/* Misc.  */
-
-char *test99 (const char *x, const char *y)
-{
-  size_t len_x = __builtin_strlen (x);
-  size_t len_y = __builtin_strlen (y);
-  /* BUG (root cause): forgot to add 1 for terminator.  */
-  size_t sz = len_x + len_y;
-  char *result = __builtin_malloc (sz);
-  if (!result)
+  int *buf = malloc (4 * sizeof (int));
+  if (!buf)
     return NULL;
-  __builtin_memcpy (result, x, len_x);
-  __builtin_memcpy (result + len_x, y, len_y);
-  /* BUG (symptom): off-by-one out-of-bounds write to heap.  */
-  result[len_x + len_y] = '\0'; /* { dg-warning "" } */
-  return result;
+  for (int i = 0; i <= 4; i++)
+    buf[i] = i; /* { dg-warning "" } */
+  return buf;
+}
+
+void test2 (int i)
+{
+  char buf[4] = {0};
+
+  if (i == 5)
+    printf ("%c", buf[i]); /* { dg-warning "" } */
+}
+
+void test3 (int i, int j)
+{
+  char buf[7] = {0};
+  if (i <= 4)
+    if (j == 2)
+      printf ("%c", buf[i * j]); /* { dg-warning "" } */
+}
+
+/* Avoid folding of memcpy.  */
+typedef void * (*memcpy_t) (void *dst, const void *src, size_t n);
+
+static memcpy_t __attribute__((noinline))
+get_memcpy (void)
+{
+  return memcpy;
+}
+
+extern int is_valid (void);
+
+int returnChunkSize (void *ptr)
+{
+  /* If chunk info is valid, return the size of usable memory,
+     else, return -1 to indicate an error.  */
+  return is_valid () ? sizeof (*ptr) : -1;
+}
+
+/* Taken from CWE-787.  */
+void test7 (void)
+{
+  memcpy_t fn = get_memcpy ();
+
+  int destBuf[4];
+  int srcBuf[4];
+  fn (destBuf, srcBuf, returnChunkSize (destBuf)); /* { dg-line test7 } */
+
+  /* { dg-warning "overread" "warning" { target *-*-* } test7 } */
+  /* { dg-warning "overflow" "warning" { target *-*-* } test7 } */
 }
