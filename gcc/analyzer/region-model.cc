@@ -1680,6 +1680,8 @@ is_positive_svalue (const svalue *sval)
   return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
 }
 
+/* Combines all constant_svalues using OP.  */
+
 static bit_size_t
 combine_all_constants (svalue_set *set, enum tree_code op)
 {
@@ -1700,9 +1702,9 @@ combine_all_constants (svalue_set *set, enum tree_code op)
   return accum;
 }
 
-/* Return true if B is definitely larger than A.
+/* Return true if A is definitely greater equal than B.
 
-   This function does put up the inequality A > B and recursively try to
+   This function does put up the inequality A >= B and recursively try to
    eliminiate all operands of B that are also in A. If A has any non-constant
    operand left, the function gives up.
 
@@ -1787,13 +1789,6 @@ symbolic_is_greater_equal (const svalue *a, const svalue *b)
             /* Remove all constants that are left and add them together.  */
             bit_size_t a_csts = combine_all_constants (&ops_a, op);
             bit_size_t b_csts = combine_all_constants (&ops_b, op);
-            
-            // if (ops_b.elements () == 1 && ops_a.elements () == 1)
-            //   {
-            //     tree cst_a = (*ops_b.begin ())->maybe_get_constant ();
-            //     tree cst_b = (*ops_b.begin ())->maybe_get_constant ();
-            //     if (cst_a && cst_b && )
-            //   }
 
             /* Given that we have eliminated all operands in B, we can compare
                whether A is larger.  */

@@ -1866,36 +1866,6 @@ frame_region::dump_untracked_regions () const
     }
 }
 
-static const svalue *
-get_larger (const svalue *a, const svalue *b)
-{
-  tree a_cst = a->maybe_get_constant ();
-  tree b_cst = b->maybe_get_constant ();
-
-  tree cmp = fold_binary (LT_EXPR, boolean_type_node, a_cst, b_cst);
-  if (cmp == boolean_true_node)
-    return b;
-  else if (cmp == boolean_false_node)
-    return a;
-  else
-    return NULL;
-}
-
-static const svalue *
-get_lesser (const svalue *a, const svalue *b)
-{
-  tree a_cst = a->maybe_get_constant ();
-  tree b_cst = b->maybe_get_constant ();
-
-  tree cmp = fold_binary (LT_EXPR, boolean_type_node, a_cst, b_cst);
-  if (cmp == boolean_true_node)
-    return a;
-  else if (cmp == boolean_false_node)
-    return b;
-  else
-    return NULL;
-}
-
 /* Fold a svalue with symbolic operands using the known
    constraints on the symbolic values.  */
 
@@ -1967,30 +1937,6 @@ public:
     insert (sval, folded);
   }
 
-  void visit_repeated_svalue (const repeated_svalue *sval) final override
-  {
-    if (!is_folded (sval->get_inner_svalue ()))
-      return;
-    const svalue *folded_inner = m_map[sval->get_inner_svalue ()];
-    const svalue *folded
-      = m_mgr->maybe_fold_repeated_svalue (sval->get_type (),
-					  sval->get_outer_size (),
-					  folded_inner);
-    insert (sval, folded);
-  }
-
-  void visit_bits_within_svalue (const bits_within_svalue *sval) final override
-  {
-    if (!is_folded (sval->get_inner_svalue ()))
-      return;
-    const svalue *folded_inner = m_map[sval->get_inner_svalue ()];
-    const svalue *folded
-      = m_mgr->maybe_fold_bits_within_svalue (sval->get_type (),
-					      sval->get_bits (),
-					      folded_inner);
-    insert (sval, folded);
-  }
-
   void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
   {
     if (!is_folded (sval->get_arg ()))
@@ -2001,7 +1947,7 @@ public:
 private:
   inline bool is_folded (const svalue *sval)
   {
-    return m_map.count (sval) == 1;
+    return m_map.find (sval) != m_map.end ();
   }
 
   inline void insert (const svalue *sval, const svalue *folded)
