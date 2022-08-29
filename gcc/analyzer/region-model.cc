@@ -74,7 +74,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
-#include <set>
 
 #if ENABLE_ANALYZER
 
@@ -1896,9 +1895,6 @@ void region_model::check_region_bounds (const region *reg,
 				    folding_mode::FM_UB, m_constraints);
       if (!folded)
         {
-          const svalue *binop = m_mgr->get_or_create_binop (integer_type_node, PLUS_EXPR,
-                                      num_bytes_sval, capacity);
-          binop->dump (false);
           /* If even the constraints can't give us a constant, we try to
              reason on symbolic values.  */
           check_symbolic_bounds (base_reg, reg_offset.get_sym_bit_offset (),

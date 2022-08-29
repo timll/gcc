@@ -94,27 +94,3 @@ void test6 (void)
   /* { dg-warning "overread" "warning" { target *-*-* } test6c } */
   /* { dg-message "" "note" { target *-*-* } test6c } */
 }
-
-extern int is_valid (void);
-
-int returnChunkSize (void *ptr)
-{
-  /* If chunk info is valid, return the size of usable memory,
-     else, return -1 to indicate an error.  */
-  return is_valid () ? sizeof (*ptr) : -1;
-}
-
-/* Taken from CWE-787.  */
-void test7 (void)
-{
-  memcpy_t fn = get_memcpy ();
-
-  int destBuf[4];
-  int srcBuf[4];
-  fn (destBuf, srcBuf, returnChunkSize (destBuf)); /* { dg-line test7 } */
-
-  // TODO: Should we handle widening_svalues as a follow-up?
-  /* { dg-warning "overread" "warning" { xfail *-*-* } test7 } */
-  /* { dg-warning "overflow" "warning" { xfail *-*-* } test7 } */
-  /* { dg-message "" "note" { xfail *-*-* } test7 } */
-}
