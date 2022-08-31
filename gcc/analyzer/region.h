@@ -624,8 +624,6 @@ public:
   void accept (visitor *v) const final override;
   void dump_to_pp (pretty_printer *pp, bool simple) const final override;
 
-  bool get_relative_concrete_offset (bit_offset_t *out) const final override;
-
   const svalue *get_pointer () const { return m_sval_ptr; }
 
 private:
@@ -1088,8 +1086,6 @@ public:
   dyn_cast_cast_region () const final override { return this; }
   void accept (visitor *v) const final override;
   void dump_to_pp (pretty_printer *pp, bool simple) const final override;
-
-  bool get_relative_concrete_offset (bit_offset_t *out) const final override;
 
   const region *get_original_region () const { return m_original_region; }
 
