@@ -1874,21 +1874,22 @@ class folding_visitor : public visitor
 public:
   folding_visitor (const svalue *root_sval, folding_mode mode,
 		   region_model_manager *mgr, constraint_manager *cm)
-    : m_root_sval (root_sval), m_mode (mode), m_mgr (mgr), m_cm (cm)
+    : m_root_sval (root_sval), m_mode (mode), m_mgr (mgr), m_cm (cm),
+      visited_widening_without_bounds (false)
   {
     m_root_sval->accept (this);
   }
 
   const constant_svalue *get_result ()
   {
-    if (is_folded (m_root_sval))
-      return m_map[m_root_sval]->dyn_cast_constant_svalue ();
+    if (const svalue *sval = get (m_root_sval))
+      return sval->dyn_cast_constant_svalue ();
     return NULL;
   }
 
   void visit_constant_svalue (const constant_svalue *sval) final override
   {
-    insert (sval, sval);
+    m_map.put (sval, sval);
   }
 
   void visit_conjured_svalue (const conjured_svalue *sval) final override
@@ -1903,57 +1904,55 @@ public:
 
   void visit_widening_svalue (const widening_svalue *sval) final override
   {
-    if (find_replacement (sval))
+    if (find_replacement (sval) || visited_widening_without_bounds)
       return;
 
-    if (is_folded (sval->get_iter_svalue ()))
-      insert (sval, m_map[sval->get_iter_svalue ()]);
-    else if (is_folded (sval->get_base_svalue ()))
-      insert (sval, m_map[sval->get_base_svalue ()]);
+    /* Prevent folding of values within a infeasible paths.  */
+    visited_widening_without_bounds = true;
+    if (const svalue *folded = get (sval->get_iter_svalue ()))
+      m_map.put (sval, folded);
+    else if (const svalue *folded = get (sval->get_base_svalue ()))
+      m_map.put (sval, folded);
   }
 
   void visit_unaryop_svalue (const unaryop_svalue *sval)
   {
-    if (!is_folded (sval->get_arg ()))
+    const svalue *folded_arg = get (sval->get_arg ());
+    if (!folded_arg)
       return;
-    const svalue *folded_arg = m_map[sval->get_arg ()];
     const svalue *folded = m_mgr->maybe_fold_unaryop (sval->get_type (),
 						      sval->get_op (),
 						      folded_arg);
-    insert (sval, folded);
+    if (folded)
+      m_map.put (sval, folded);
   }
 
   void visit_binop_svalue (const binop_svalue *sval) final override
   {
-    if (!is_folded (sval->get_arg0 ())
-	|| !is_folded (sval->get_arg1 ()))
+    const svalue *folded_arg0 = get (sval->get_arg0 ());
+    const svalue *folded_arg1 = get (sval->get_arg1 ());
+    if (!folded_arg0 || !folded_arg1)
       return;
-    const svalue *folded_arg0 = m_map[sval->get_arg0 ()];
-    const svalue *folded_arg1 = m_map[sval->get_arg1 ()];
     const svalue *folded = m_mgr->maybe_fold_binop (sval->get_type (),
 						    sval->get_op (),
 						    folded_arg0,
 						    folded_arg1);
-    insert (sval, folded);
+    if (folded)
+      m_map.put (sval, folded);
   }
 
   void visit_unmergeable_svalue (const unmergeable_svalue *sval) final override
   {
-    if (!is_folded (sval->get_arg ()))
-      return;
-    insert (sval, m_map[sval->get_arg ()]);
+    if (const svalue *folded = get (sval->get_arg ()))
+      m_map.put (sval, folded);
   }
 
 private:
-  inline bool is_folded (const svalue *sval)
+  const svalue *get (const svalue *sval)
   {
-    return m_map.find (sval) != m_map.end ();
-  }
-
-  inline void insert (const svalue *sval, const svalue *folded)
-  {
-    if (folded)
-      m_map.insert (std::make_pair (sval, folded));
+    if (const svalue **ptr_to_sval = m_map.get (sval))
+      return *ptr_to_sval;
+    return NULL;
   }
 
   bool find_replacement (const svalue *sval)
@@ -1967,12 +1966,11 @@ private:
     case folding_mode::FM_UB:
       {
 	range bounds = m_cm->get_ec_bounds (id);
-	tree ub_cst = bounds.get_upper_bound_cst ();
-	if (ub_cst)
+	if (tree ub_cst = bounds.get_upper_bound_cst ())
 	  {
 	    const svalue* cst_sval
 	      = m_mgr->get_or_create_constant_svalue (ub_cst);
-	    insert (sval, cst_sval);
+	    m_map.put (sval, cst_sval);
 	    return true;
 	  }
       }
@@ -1980,12 +1978,11 @@ private:
     case folding_mode::FM_LB:
       {
 	range bounds = m_cm->get_ec_bounds (id);
-	tree lb_cst = bounds.get_lower_bound_cst ();
-	if (lb_cst)
+	if (tree lb_cst = bounds.get_lower_bound_cst ())
 	  {
 	    const svalue* cst_sval
 	      = m_mgr->get_or_create_constant_svalue (lb_cst);
-	    insert (sval, cst_sval);
+	    m_map.put (sval, cst_sval);
 	    return true;
 	  }
       }
@@ -2000,7 +1997,7 @@ private:
     if (tree cst = id.get_obj (*m_cm).get_any_constant ())
     {
       const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
-      insert (sval, cst_sval);
+      m_map.put (sval, cst_sval);
       return true;
     }
 
@@ -2011,8 +2008,9 @@ private:
   folding_mode m_mode;
   region_model_manager *m_mgr;
   constraint_manager *m_cm;
+  bool visited_widening_without_bounds;
   /* Map svalues to it's folded counterpart.  */
-  std::unordered_map<const svalue *, const svalue *> m_map;
+  hash_map <const svalue *, const svalue *> m_map;
 };
 
 /* Try to fold SVAL using constraints the analyzer collected.  */

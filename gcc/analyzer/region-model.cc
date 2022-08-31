@@ -1834,7 +1834,7 @@ void region_model::check_symbolic_bounds (const region *base_reg,
 
   if (symbolic_is_greater_equal (sym_bit_offset, capacity_in_bits))
     {
-      ctxt->warn (new symbolic_oob (base_reg, dir));
+      // ctxt->warn (new symbolic_oob (base_reg, dir));
     }
 }
 
