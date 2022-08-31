@@ -698,31 +698,6 @@ region_model::impl_call_operator_delete (const call_details &cd)
     }
 }
 
-/* Return true if both values are constants and
-   set OUT to the lesser of both.  */
-
-static bool
-get_lesser (const svalue *a, const svalue *b, const svalue **out)
-{
-  tree a_cst = a->maybe_get_constant ();
-  tree b_cst = b->maybe_get_constant ();
-  if (a_cst && b_cst)
-   {
-      tree cmp = fold_binary (LT_EXPR, boolean_type_node, a_cst, b_cst);
-      if (cmp == boolean_true_node)
-	{
-	  *out = a;
-	  return true;
-	}
-      else if (cmp == boolean_false_node)
-	{
-	  *out = b;
-	  return true;
-	}
-   }
-   return false;
-}
-
 /* Handle the on_call_post part of "realloc":
 
      void *realloc(void *ptr, size_t size);
@@ -875,7 +850,7 @@ region_model::impl_call_realloc (const call_details &cd)
 	  if (old_size_sval)
 	    {
 	      const svalue *copied_size_sval
-		= get_copied_size (old_size_sval, new_size_sval);
+		= get_copied_size (model, old_size_sval, new_size_sval);
 	      const region *copied_old_reg
 		= model->m_mgr->get_sized_region (freed_reg, NULL,
 						  copied_size_sval);
@@ -920,18 +895,27 @@ region_model::impl_call_realloc (const call_details &cd)
     }
 
   private:
-    /* Return the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL.
-       If either one is symbolic, the symbolic svalue is returned.  */
-    const svalue *get_copied_size (const svalue *old_size_sval,
+    /* Return the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL if comparable.
+       Otherwise, return NEW_SIZE_SVAL.  */
+    const svalue *get_copied_size (region_model *model,
+				   const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
-      const svalue *lesser;
-      if (get_lesser (old_size_sval, new_size_sval, &lesser))
-	return lesser;
-      else if (new_size_sval->get_kind () == SK_CONSTANT)
-	return old_size_sval;
-      else
-	return new_size_sval;
+      tristate ts
+	= model->eval_condition (old_size_sval, LT_EXPR, new_size_sval);
+      switch (ts.get_value ())
+	{
+	  case tristate::TS_TRUE:
+	    return old_size_sval;
+	  case tristate::TS_FALSE:
+	  case tristate::TS_UNKNOWN:
+	    /* If we can't reason about the inequality, still return
+	       NEW_SIZE_SVAL, because most implementations won't move
+	       when the buffer shrinks.  */
+	    return new_size_sval;
+	  default:
+	    gcc_unreachable ();
+	}
     }
   };
 
@@ -1033,7 +1017,9 @@ region_model::impl_call_strcpy (const call_details &cd)
 
   cd.maybe_set_lhs (dest_sval);
 
+  /* Try to get the string size if SRC_REG is a string_region.  */
   const svalue *copied_bytes_sval = get_string_size (src_reg);
+  /* Otherwise, check if the contents of SRC_REG is a string.  */
   if (copied_bytes_sval->get_kind () == SK_UNKNOWN)
     copied_bytes_sval = get_string_size (src_contents_sval);
 
@@ -1062,10 +1048,26 @@ region_model::impl_call_strncpy (const call_details &cd)
   const svalue *string_size_sval = get_string_size (src_reg);
   if (string_size_sval->get_kind () == SK_UNKNOWN)
     string_size_sval = get_string_size (src_contents_sval);
-  
+
+  /* strncpy copies until a zero terminator is reached or n bytes were copied.
+     Determine the lesser of both here.  */
+  tristate ts = eval_condition (string_size_sval, LT_EXPR, num_bytes_sval);
   const svalue *copied_bytes_sval;
-  if (!get_lesser (string_size_sval, num_bytes_sval, &copied_bytes_sval))
-    copied_bytes_sval = m_mgr->get_or_create_unknown_svalue (size_type_node);
+  switch (ts.get_value ())
+    {
+      case tristate::TS_TRUE:
+	copied_bytes_sval = string_size_sval;
+	break;
+      case tristate::TS_FALSE:
+	copied_bytes_sval = num_bytes_sval;
+	break;
+      case tristate::TS_UNKNOWN:
+	copied_bytes_sval
+	  = m_mgr->get_or_create_unknown_svalue (size_type_node);
+	break;
+      default:
+	gcc_unreachable ();
+    }
 
   const region *sized_dest_reg = m_mgr->get_sized_region (dest_reg, NULL_TREE,
 							  copied_bytes_sval);

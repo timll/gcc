@@ -3222,7 +3222,6 @@ region_model::get_capacity (const region *reg) const
   return m_mgr->get_or_create_unknown_svalue (sizetype);
 }
 
-
 /* Return the string size, including the 0-terminator, if SVAL is a
    constant_svalue holding a string.  Otherwise, return an unknown_svalue.  */
 
