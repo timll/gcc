@@ -1600,38 +1600,50 @@ public:
 /* Diagnostic to complain about out-of-bounds read/writes where
    the value is symbolic.  */
 
-class symbolic_oob
-  : public pending_diagnostic_subclass<symbolic_oob>
+class symbolic_past_the_end
+  : public pending_diagnostic_subclass<symbolic_past_the_end>
 {
 public:
-  symbolic_oob (const region *reg, enum access_direction dir)
-    : m_reg (reg), m_dir (dir)
+  symbolic_past_the_end (const region *reg, tree offset, tree num_bytes,
+                         tree capacity, enum access_direction dir)
+    : m_reg (reg), m_offset (offset), m_num_bytes (num_bytes),
+      m_capacity (capacity), m_dir (dir)
   {}
 
   const char *get_kind () const final override
   {
-    return "symbolic_oob";
+    return "symbolic_past_the_end";
   }
 
-  bool operator== (const symbolic_oob &other) const
+  bool operator== (const symbolic_past_the_end &other) const
   {
-    return m_dir == other.m_dir;
+    return m_reg == other.m_reg
+           && pending_diagnostic::same_tree_p (m_offset, other.m_offset)
+           && pending_diagnostic::same_tree_p (m_num_bytes, other.m_num_bytes)
+           && pending_diagnostic::same_tree_p (m_capacity, other.m_capacity)
+           && m_dir == other.m_dir;
   }
 
   int get_controlling_option () const final override
   {
-    return OPT_Wanalyzer_maybe_out_of_bounds;
+    return OPT_Wanalyzer_out_of_bounds;
   }
 
   bool emit (rich_location *rich_loc) final override
   {
     return warning_at (rich_loc, get_controlling_option (),
-                       "maybe out-of-bounds");
+                       "access past the end of the bufer");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
   {
-    return ev.formatted_print ("access is larger than the capacity");
+    if (m_offset)
+      {
+        if (m_num_bytes)
+          return ev.formatted_print ("accessing %qE bytes starting from %qE exceeds the buffer", m_num_bytes, m_offset);
+        return ev.formatted_print ("acess starting from %qE exceeds the buffer", m_offset);
+      }
+    return ev.formatted_print ("access exceeds the buffer");
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
@@ -1639,8 +1651,21 @@ public:
     interest->add_region_creation (m_reg);
   }
 
+  label_text
+  describe_region_creation_event (const evdesc::region_creation &ev) final
+  override
+  {
+    if (m_capacity)
+      return ev.formatted_print ("capacity is %qE bytes", m_capacity);
+
+    return label_text ();
+  }
+
 private:
   const region *m_reg;
+  tree m_offset;
+  tree m_num_bytes;
+  tree m_capacity;
   enum access_direction m_dir;
 };
 
@@ -1675,6 +1700,8 @@ is_positive_svalue (const svalue *sval)
       tree cmp = fold_binary (GT_EXPR, boolean_type_node, cst, integer_zero_node);
       return cmp == boolean_true_node;
     }
+  if (const unaryop_svalue *un_op = dyn_cast <const unaryop_svalue *> (sval))
+    return is_positive_svalue (un_op->get_arg ());
   return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
 }
 
@@ -1811,14 +1838,15 @@ symbolic_greater_than (const svalue *a, const svalue *b)
       byte_size_t b_csts = combine_all_constants (op, &ops_b);
 
       bool eliminated_greater_subexpression = false;
-      /* If B still has operands, try to resolve binops in A.  */
+      /* If B still has operands, try to resolve binops in A.
+         E.g. for cases like B = i * j and A = (i * j) + 1.  */
       if (!ops_b.empty ())
         for (auto iter_a = ops_a.begin (); iter_a != ops_a.end ();)
-          if ((*iter_a)->get_kind () == SK_BINOP)
-            {
-              bool erased = false;
-              for (auto iter_b = ops_b.begin (); iter_b != ops_b.end ();)
-                {
+          {
+            bool erased = false;
+            if ((*iter_a)->get_kind () == SK_BINOP)
+              {
+                for (auto iter_b = ops_b.begin (); iter_b != ops_b.end ();)
                   /* Assuming later either one operand is left in A or
                     a_csts > b_csts is true, we also want to eliminate
                     structural equivalent operands. */ 
@@ -1839,10 +1867,10 @@ symbolic_greater_than (const svalue *a, const svalue *b)
                     }
                   else
                     ++iter_b;
-                }
-              if (!erased)
-                ++iter_a;
-            }
+              }
+            if (!erased)
+              ++iter_a;
+          }
 
       /* We have eliminated all operands of B
          and A could be greater than B.  */
@@ -1876,12 +1904,17 @@ void region_model::check_symbolic_bounds (const region *base_reg,
   gcc_assert (ctxt);
 
   const svalue *next_byte
-    = m_mgr->get_or_create_binop (integer_type_node, MULT_EXPR,
+    = m_mgr->get_or_create_binop (sym_byte_offset->get_type (), PLUS_EXPR,
                                   sym_byte_offset, num_bytes_sval);
 
   if (symbolic_greater_than (next_byte, capacity).is_true ())
     {
-      ctxt->warn (new symbolic_oob (base_reg, dir));
+      tree offset_tree = get_representative_tree (sym_byte_offset);
+      tree num_bytes_tree = get_representative_tree (num_bytes_sval);
+      tree capacity_tree = get_representative_tree (capacity);
+      ctxt->warn (new symbolic_past_the_end (base_reg, offset_tree,
+                                             num_bytes_tree,
+                                             capacity_tree, dir));
     }
 }
 
@@ -1927,14 +1960,9 @@ void region_model::check_region_bounds (const region *reg,
     }
 
   const svalue *capacity = get_capacity (base_reg);
-
+  
   byte_offset_t offset_unsigned;
-  if (!reg_offset.symbolic_p ())
-    {
-      /* We do have a concrete offset, so use that.  */
-      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
-    }
-  else
+  if (reg_offset.symbolic_p ())
     {
       const svalue *sym_byte_offset = reg_offset.get_symbolic_byte_offset ();
       /* Try to use the constraints to get an upper bound.  */
@@ -1943,8 +1971,8 @@ void region_model::check_region_bounds (const region *reg,
                                     m_constraints);
       if (!folded)
         {
-          /* If even the constraints can't give us a constant, we try to
-             reason on symbolic values.  */
+          /* If even the constraints can't give us a constant offset and
+             access bytes, we try to reason about the inequality.  */
           check_symbolic_bounds (base_reg, sym_byte_offset, num_bytes_sval,
                                  capacity, dir, ctxt);
           return;
@@ -1952,6 +1980,11 @@ void region_model::check_region_bounds (const region *reg,
       maybe = true;
       offset_unsigned
 	= wi::to_offset (folded->get_constant ()) >> LOG2_BITS_PER_UNIT;
+    }
+  else
+    {
+      /* We do have a concrete offset, so use that.  */
+      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
     }
 
   /* The constant offset from a pointer is represented internally as a sizetype
@@ -4216,12 +4249,12 @@ region_model::eval_condition_without_cm (const svalue *lhs,
 	  return res;
       }
 
-  if (op == GT_EXPR)
-    {
-      tristate res = symbolic_greater_than (lhs, rhs);
-      if (res.is_known ())
-        return res;
-    }
+  // if (op == GT_EXPR)
+  //   {
+  //     tristate res = symbolic_greater_than (lhs, rhs);
+  //     if (res.is_known ())
+  //       return res;
+  //   }
 
   return tristate::TS_UNKNOWN;
 }

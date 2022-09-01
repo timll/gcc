@@ -1,3 +1,5 @@
+/* { dg-additional-options "-Wno-unused-but-set-variable" } */
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +56,7 @@ void test4 (size_t size, size_t op)
 
 void test5 (size_t size)
 {
-  int32_t *buf = __builtin_alloca (size + 7); /* { dg-warning "allocated buffer size is not a multiple of the pointee's size" } */
+  int32_t *buf = __builtin_alloca (4 * size + 3); /* { dg-warning "allocated buffer size is not a multiple of the pointee's size" } */
   buf[size] = 42; /* { dg-warning "" } */
 }
 
@@ -72,21 +74,14 @@ void test7 (size_t size, size_t offset)
   memcpy (dst, src, size + 1); /* { dg-warning "" } */
 }
 
-/* Test fallback on structural equality.  */
+/* Test for no false-positives.  */
 
-void test8 (size_t size, size_t offset)
-{
-  int buf[size - offset];
-  buf[size - offset] = 42; /* { dg-warning "" } */
-}
 
 void test9 (size_t size)
 {
-  int buf[size - 1];
-  buf[size - 1] = 42; /* { dg-warning "" } */
+  int32_t *buf = __builtin_alloca (4 * size + 4);
+  buf[size] = 42;
 }
-
-/* Test for no false-positives.  */
 
 void test10 (size_t size, size_t offset)
 {
@@ -99,6 +94,13 @@ void test11 (size_t size, int offset)
   int buf[size];
   /* We don't know whether offset is positive or not.  */
   buf[size + offset] = 42;
+}
+
+void test11b (size_t size, size_t offset)
+{
+  int buf[size];
+  /* Here we know the offset is positive.  */
+  buf[size + offset] = 42; /* { dg-warning "" } */
 }
 
 void test12 (size_t size, size_t offset, size_t offset2)

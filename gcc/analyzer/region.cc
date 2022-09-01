@@ -510,7 +510,7 @@ region::calc_offset (region_model_manager *mgr) const
               const svalue *sval
                 = iter_region->get_relative_symbolic_offset (mgr);
               accum_byte_sval
-                = mgr->get_or_create_binop (integer_type_node, PLUS_EXPR,
+                = mgr->get_or_create_binop (sval->get_type (), PLUS_EXPR,
                                             accum_byte_sval, sval);
               iter_region = iter_region->get_parent_region ();
             }
