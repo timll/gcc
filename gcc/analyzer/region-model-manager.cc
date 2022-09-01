@@ -1994,12 +1994,15 @@ private:
       break;
     }
 
+    /* Fallback: Use equal relations if there are no bounds.  */
     if (tree cst = id.get_obj (*m_cm).get_any_constant ())
     {
       const svalue* cst_sval = m_mgr->get_or_create_constant_svalue (cst);
       m_map.put (sval, cst_sval);
       return true;
     }
+
+    /* TODO: also consider bounded_ranges from switch cases.  */
 
     return false;
   }
