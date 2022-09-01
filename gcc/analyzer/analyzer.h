@@ -190,7 +190,7 @@ public:
     return m_offset;
   }
 
-  const svalue *get_sym_bit_offset () const
+  const svalue *get_symbolic_byte_offset () const
   {
     gcc_assert (symbolic_p ());
     return m_sym_offset;
