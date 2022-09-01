@@ -74,6 +74,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
+#include <set>
 
 #if ENABLE_ANALYZER
 
@@ -1647,7 +1648,8 @@ private:
    the same commutative operator OP to SET.  */
 
 static void
-find_all_operands (enum tree_code op, svalue_set *set, const svalue *sval)
+find_all_operands (enum tree_code op, std::multiset<const svalue *> *set,
+                   const svalue *sval)
 {
   gcc_assert (commutative_tree_code (op));
 
@@ -1660,7 +1662,7 @@ find_all_operands (enum tree_code op, svalue_set *set, const svalue *sval)
           return;
         }
     }
-  set->add (sval);
+  set->insert (sval);
 }
 
 /* Return true if SVAL is definitely positive.  */
@@ -1680,20 +1682,18 @@ is_positive_svalue (const svalue *sval)
 }
 
 static bool
-all_positive (svalue_set *set)
+all_positive (std::multiset<const svalue *> *set)
 {
-  for (svalue_set::iterator iter = set->begin (); iter != set->end (); ++iter)
-    {
-      if (!is_positive_svalue (*iter))
-        return false;
-    }
+  for (auto iter = set->begin (); iter != set->end (); iter++)
+    if (!is_positive_svalue (*iter))
+      return false;
   return true;
 }
 
 /* Combines all constant_svalues using OP.  */
 
 static bit_size_t
-combine_all_constants (enum tree_code op, svalue_set *set)
+combine_all_constants (enum tree_code op, std::multiset<const svalue *> *set)
 {
   gcc_assert (op == PLUS_EXPR || op == MULT_EXPR);
 
@@ -1703,7 +1703,7 @@ combine_all_constants (enum tree_code op, svalue_set *set)
     accum = (int) 0;
   else
     accum = (int) 1;
-  for (svalue_set::iterator iter = set->begin (); iter != set->end (); ++iter)
+  for (auto iter = set->begin (); iter != set->end ();)
     {
       if (tree cst = (*iter)->maybe_get_constant ())
         {
@@ -1711,8 +1711,10 @@ combine_all_constants (enum tree_code op, svalue_set *set)
             accum += wi::to_offset (cst);
           else
             accum *= wi::to_offset (cst);
-          set->remove (*iter);
+          iter = set->erase (iter);
         }
+      else
+        ++iter;
     }
   return accum;
 }
@@ -1902,22 +1904,24 @@ symbolic_greater_than (const svalue *a, const svalue *b)
     {
       /* + and * are commutative, thus we have to ignore
          the order of the operands. */
-      svalue_set ops_a;
+      std::multiset<const svalue *> ops_a;
       find_all_operands (op, &ops_a, a);
-      svalue_set ops_b;
+      std::multiset<const svalue *> ops_b;
       find_all_operands (op, &ops_b, b);
 
       /* Try to eliminate all operands on the same level that are referentially
          equal aka constant_svalues, initial_svalues and conjured_svalues.  */
-      for (svalue_set::iterator iter = ops_a.begin ();
-           iter != ops_a.end (); ++iter)
+      for (auto iter = ops_a.begin (); iter != ops_a.end ();)
         {
           const svalue *operand = *iter;
-          if (ops_b.contains (operand))
+          auto match = ops_b.find (operand);
+          if (match != ops_b.end ())
             {
-              ops_a.remove (operand);
-              ops_b.remove (operand);
+              iter = ops_a.erase (iter);
+              ops_b.erase (match);
             }
+          else
+            ++iter;
         }
 
       /* Accumulate up all constant_svalues that are left
@@ -1927,44 +1931,54 @@ symbolic_greater_than (const svalue *a, const svalue *b)
 
       bool eliminated_greater_subexpression = false;
       /* If B still has operands, try to resolve binops in A.  */
-      if (!ops_b.is_empty ())
-        for (svalue_set::iterator iter_a = ops_a.begin ();
-            iter_a != ops_a.end (); ++iter_a)
+      if (!ops_b.empty ())
+        for (auto iter_a = ops_a.begin (); iter_a != ops_a.end ();)
           if ((*iter_a)->get_kind () == SK_BINOP)
-            for (svalue_set::iterator iter_b = ops_b.begin ();
-                  iter_b != ops_b.end (); ++iter_b)
+            {
+              bool erased = false;
+              for (auto iter_b = ops_b.begin (); iter_b != ops_b.end ();)
                 {
                   /* Assuming later either one operand is left in A or
-                     a_csts > b_csts is true, we also want to eliminate
-                     structural equivalent operands. */ 
+                    a_csts > b_csts is true, we also want to eliminate
+                    structural equivalent operands. */ 
                   if (structural_equality (*iter_a, *iter_b))
                     {
-                      ops_a.remove (*iter_a);
-                      ops_b.remove (*iter_b);
+                      iter_a = ops_a.erase (iter_a);
+                      iter_b = ops_b.erase (iter_b);
+                      erased = true;
+                      break;
                     }
                   else if (symbolic_greater_than (*iter_a, *iter_b).is_true ())
                     {
-                      ops_a.remove (*iter_a);
-                      ops_b.remove (*iter_b);
+                      iter_a = ops_a.erase (iter_a);
+                      iter_b = ops_b.erase (iter_b);
+                      erased = true;
                       eliminated_greater_subexpression = true;
+                      break;
                     }
+                  else
+                    ++iter_b;
                 }
+              if (!erased)
+                ++iter_a;
+            }
 
       /* We have eliminated all operands of B
          and A could be greater than B.  */
-      if (ops_b.is_empty () && a_csts >= b_csts)
+      if (ops_b.empty () && a_csts >= b_csts)
         {
           /* Check that all operands that are left in B are positive or when
              there are no operands left, that A is not equal to B. */
-          if ((!ops_a.is_empty () && all_positive (&ops_a))
-              || (ops_a.is_empty ()
+          if ((!ops_a.empty () && all_positive (&ops_a))
+              || (ops_a.empty ()
                   && (eliminated_greater_subexpression
                       || a_csts != b_csts)))
             return tristate (true);
         }
 
       /* Check if A <= B.  */
-      if (ops_a.is_empty () && a_csts <= b_csts && all_positive (&ops_b))
+      if (ops_a.empty () && a_csts <= b_csts && all_positive (&ops_b)
+          && !eliminated_greater_subexpression)
         return tristate (false);
     }
 
