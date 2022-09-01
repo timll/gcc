@@ -1632,7 +1632,7 @@ public:
   bool emit (rich_location *rich_loc) final override
   {
     return warning_at (rich_loc, get_controlling_option (),
-                       "access past the end of the bufer");
+                       "access past the end of the buffer");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
@@ -1640,8 +1640,11 @@ public:
     if (m_offset)
       {
         if (m_num_bytes)
-          return ev.formatted_print ("accessing %qE bytes starting from %qE exceeds the buffer", m_num_bytes, m_offset);
-        return ev.formatted_print ("acess starting from %qE exceeds the buffer", m_offset);
+          return ev.formatted_print ("accessing %qE bytes with offset %qE"
+                                     " exceeds the buffer",
+                                     m_num_bytes, m_offset);
+        return ev.formatted_print ("access with offset %qE exceeds the buffer",
+                                   m_offset);
       }
     return ev.formatted_print ("access exceeds the buffer");
   }
@@ -1705,6 +1708,8 @@ is_positive_svalue (const svalue *sval)
   return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
 }
 
+/* Return true if all elements of SET are definitely positive.  */
+
 static bool
 all_positive (std::multiset<const svalue *> *set)
 {
@@ -1754,8 +1759,15 @@ structural_equality (const svalue *a, const svalue *b)
       return false;
     case SK_CONJURED:
     case SK_INITIAL:
-    case SK_CONSTANT:
       return a == b;
+    case SK_CONSTANT:
+      {
+        tree a_cst = a->maybe_get_constant ();
+        tree b_cst = b->maybe_get_constant ();
+        if (a_cst && b_cst)
+          return tree_int_cst_equal (a_cst, b_cst);
+      }
+      return false;
     case SK_UNARYOP:
       {
         const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
@@ -1771,9 +1783,7 @@ structural_equality (const svalue *a, const svalue *b)
       {
         const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
         if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
-          if (bin_a->get_op () == bin_b->get_op ()
-              && pending_diagnostic::same_tree_p (bin_a->get_type (),
-                                                  bin_b->get_type ()))
+          if (bin_a->get_op () == bin_b->get_op ())
             {
               if (commutative_tree_code (bin_a->get_op ()))
                 return (structural_equality (bin_a->get_arg0 (),
@@ -1894,6 +1904,8 @@ symbolic_greater_than (const svalue *a, const svalue *b)
   return tristate::unknown ();
 }
 
+/* Check whether an access is past the end of the BASE_REG.  */
+
 void region_model::check_symbolic_bounds (const region *base_reg,
                                           const svalue *sym_byte_offset,
                                           const svalue *num_bytes_sval,
@@ -1907,7 +1919,8 @@ void region_model::check_symbolic_bounds (const region *base_reg,
     = m_mgr->get_or_create_binop (sym_byte_offset->get_type (), PLUS_EXPR,
                                   sym_byte_offset, num_bytes_sval);
 
-  if (symbolic_greater_than (next_byte, capacity).is_true ())
+  // if (symbolic_greater_than (next_byte, capacity).is_true ())
+  if (eval_condition_without_cm (next_byte, GT_EXPR, capacity).is_true ())
     {
       tree offset_tree = get_representative_tree (sym_byte_offset);
       tree num_bytes_tree = get_representative_tree (num_bytes_sval);
@@ -1918,11 +1931,39 @@ void region_model::check_symbolic_bounds (const region *base_reg,
     }
 }
 
+/* Try to convert SVAL to a integer_cst tree, possibly using upper bounds,
+   and return the tree. If folding was involded, FOLDED is set to true.
+   Otherwise, return NULL_TREE.  */
+
+tree
+region_model::get_cst_tree_with_upper_bound (const svalue *sval, bool &folded) const
+{
+  tree cst_tree = sval->maybe_get_constant ();
+  if (cst_tree && TREE_CODE (cst_tree) == INTEGER_CST)
+    return cst_tree;
+
+  const constant_svalue *folded_sval
+    = m_mgr->maybe_fold_svalue (sval, folding_mode::FM_UB,
+                                m_constraints);
+  if (folded_sval)
+    {
+      tree folded_tree = folded_sval->get_constant ();
+      if (TREE_CODE (folded_tree) == INTEGER_CST)
+        {
+          folded = true;
+          return folded_tree;
+        }
+    }
+
+  return NULL_TREE;
+}
+
 /* May complain when the access on REG is out-of-bounds.  */
 
-void region_model::check_region_bounds (const region *reg,
-					enum access_direction dir,
-					region_model_context *ctxt) const
+void
+region_model::check_region_bounds (const region *reg,
+                                   enum access_direction dir,
+                                   region_model_context *ctxt) const
 {
   gcc_assert (ctxt);
 
@@ -1935,57 +1976,33 @@ void region_model::check_region_bounds (const region *reg,
   if (base_reg->symbolic_p ())
     return;
 
-  bool maybe = false;
+  /* Signalizes that at least one concrete value
+     was folded using the collected constraints. */ 
+  bool folded = false;
 
-  /* Find out how many bytes were accessed.  */
-  const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
-  tree num_bytes_tree = num_bytes_sval->maybe_get_constant ();
-  if (!num_bytes_tree || TREE_CODE (num_bytes_tree) != INTEGER_CST)
-    {
-      /* Try to use the constraints to get an upper bound.  */
-      const constant_svalue *folded
-	      = m_mgr->maybe_fold_svalue (num_bytes_sval, folding_mode::FM_UB,
-                                    m_constraints);
-      if (folded)
-        {
-          maybe = true;
-          num_bytes_tree = folded->get_constant ();
-        }
-      else
-        {
-          /* If we do not know how many bytes were read/written,
-            assume that at least one byte was read/written.  */
-          num_bytes_tree = integer_one_node;
-        }
-    }
-
-  const svalue *capacity = get_capacity (base_reg);
-  
+  /* Get the offset.  */
+  bool concrete_offset = true;
   byte_offset_t offset_unsigned;
   if (reg_offset.symbolic_p ())
     {
       const svalue *sym_byte_offset = reg_offset.get_symbolic_byte_offset ();
-      /* Try to use the constraints to get an upper bound.  */
-      const constant_svalue *folded
-        = m_mgr->maybe_fold_svalue (sym_byte_offset, folding_mode::FM_UB,
-                                    m_constraints);
-      if (!folded)
-        {
-          /* If even the constraints can't give us a constant offset and
-             access bytes, we try to reason about the inequality.  */
-          check_symbolic_bounds (base_reg, sym_byte_offset, num_bytes_sval,
-                                 capacity, dir, ctxt);
-          return;
-        }
-      maybe = true;
-      offset_unsigned
-	= wi::to_offset (folded->get_constant ()) >> LOG2_BITS_PER_UNIT;
+      tree byte_offset_tree = get_cst_tree_with_upper_bound (sym_byte_offset,
+                                                             folded);
+      if (byte_offset_tree)
+        offset_unsigned = wi::to_offset (byte_offset_tree);
+      else
+        concrete_offset = false;
     }
   else
-    {
-      /* We do have a concrete offset, so use that.  */
-      offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
-    }
+    offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
+
+  /* Find out how many bytes were accessed.  */
+  const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
+  tree num_bytes_tree = get_cst_tree_with_upper_bound (num_bytes_sval, folded);
+
+  /* Get the capacity of the buffer.  */
+  const svalue *capacity = get_capacity (base_reg);
+  tree cst_capacity_tree = get_cst_tree_with_upper_bound (capacity, folded);
 
   /* The constant offset from a pointer is represented internally as a sizetype
      but should be interpreted as a signed value here.  The statement below
@@ -1997,6 +2014,25 @@ void region_model::check_region_bounds (const region *reg,
   byte_offset_t offset
     = (int) offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
 
+  /* If either the offset or the number of bytes accessed are symbolic,
+     we have to reason about symbolic values.  */
+  if (!concrete_offset || !num_bytes_tree)
+    {
+      const svalue* byte_offset_sval;
+      if (concrete_offset)
+        {
+          tree offset_tree = wide_int_to_tree (integer_type_node, offset);
+          byte_offset_sval
+            = m_mgr->get_or_create_constant_svalue (offset_tree);
+        }
+      else
+        byte_offset_sval = reg_offset.get_symbolic_byte_offset ();
+      check_symbolic_bounds (base_reg, byte_offset_sval, num_bytes_sval,
+                             capacity, dir, ctxt);
+      return;
+    }
+
+  /* Otherwise continue to check with concrete values.  */
   byte_range out (0, 0);
   /* NUM_BYTES_TREE should always be interpreted as unsigned.  */
   byte_offset_t num_bytes_unsigned
@@ -2007,21 +2043,23 @@ void region_model::check_region_bounds (const region *reg,
     {
       tree diag_arg = get_representative_tree (base_reg);
       switch (dir)
-	{
-	default:
-	  gcc_unreachable ();
-	  break;
-	case DIR_READ:
-	  ctxt->warn (new buffer_underread (reg, diag_arg, out, maybe));
-	  break;
-	case DIR_WRITE:
-	  ctxt->warn (new buffer_underflow (reg, diag_arg, out, maybe));
-	  break;
-	}
+        {
+        default:
+          gcc_unreachable ();
+          break;
+        case DIR_READ:
+          ctxt->warn (new buffer_underread (reg, diag_arg, out, folded));
+          break;
+        case DIR_WRITE:
+          ctxt->warn (new buffer_underflow (reg, diag_arg, out, folded));
+          break;
+        }
     }
 
-  tree cst_capacity_tree = capacity->maybe_get_constant ();
-  if (!cst_capacity_tree || TREE_CODE (cst_capacity_tree) != INTEGER_CST)
+  /* For accesses past the end, we do need a concrete capacity.  No need to
+     do a symbolic check here because the inequality check does not reason
+     whether constants are greater than symbolic values.  */
+  if (!cst_capacity_tree)
     return;
 
   byte_range buffer (0, wi::to_offset (cst_capacity_tree));
@@ -2033,17 +2071,19 @@ void region_model::check_region_bounds (const region *reg,
       tree diag_arg = get_representative_tree (reg->get_base_region ());
 
       switch (dir)
-	{
-	default:
-	  gcc_unreachable ();
-	  break;
-	case DIR_READ:
-	  ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound, maybe));
-	  break;
-	case DIR_WRITE:
-	  ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound, maybe));
-	  break;
-	}
+        {
+        default:
+          gcc_unreachable ();
+          break;
+        case DIR_READ:
+          ctxt->warn (new buffer_overread (reg, diag_arg, out,
+                                           byte_bound, folded));
+          break;
+        case DIR_WRITE:
+          ctxt->warn (new buffer_overflow (reg, diag_arg, out,
+                                           byte_bound, folded));
+          break;
+        }
     }
 }
 
@@ -4249,12 +4289,12 @@ region_model::eval_condition_without_cm (const svalue *lhs,
 	  return res;
       }
 
-  // if (op == GT_EXPR)
-  //   {
-  //     tristate res = symbolic_greater_than (lhs, rhs);
-  //     if (res.is_known ())
-  //       return res;
-  //   }
+  if (op == GT_EXPR)
+    {
+      tristate res = symbolic_greater_than (lhs, rhs);
+      if (res.is_known ())
+        return res;
+    }
 
   return tristate::TS_UNKNOWN;
 }

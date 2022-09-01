@@ -4,14 +4,11 @@
 
 /* Tests requiring folding constraints.  */
 
-int *test1 ()
+void test1 (void)
 {
-  int *buf = malloc (4 * sizeof (int));
-  if (!buf)
-    return NULL;
+  int buf[4];
   for (int i = 0; i <= 4; i++)
     buf[i] = i; /* { dg-warning "" } */
-  return buf;
 }
 
 void test2 (int i)

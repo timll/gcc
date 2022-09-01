@@ -890,6 +890,8 @@ class region_model
   void check_region_bounds (const region *reg, enum access_direction dir,
 			    region_model_context *ctxt) const;
 
+  tree get_cst_tree_with_upper_bound (const svalue *sval, bool &folded) const;
+
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,
 						tree callee_fndecl,

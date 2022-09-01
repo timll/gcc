@@ -62,20 +62,19 @@ void test5 (size_t size)
 
 void test6 (size_t size, size_t offset)
 {
-  int src[size];
-  int dst[size];
+  char src[size];
+  char dst[size];
   memcpy (dst, src, size + offset); /* { dg-warning "" } */
 }
 
 void test7 (size_t size, size_t offset)
 {
-  int src[size];
-  int dst[size];
-  memcpy (dst, src, size + 1); /* { dg-warning "" } */
+  int32_t src[size];
+  int32_t dst[size];
+  memcpy (dst, src, 4 * size + 1); /* { dg-warning "" } */
 }
 
 /* Test for no false-positives.  */
-
 
 void test9 (size_t size)
 {
@@ -96,17 +95,10 @@ void test11 (size_t size, int offset)
   buf[size + offset] = 42;
 }
 
-void test11b (size_t size, size_t offset)
-{
-  int buf[size];
-  /* Here we know the offset is positive.  */
-  buf[size + offset] = 42; /* { dg-warning "" } */
-}
-
 void test12 (size_t size, size_t offset, size_t offset2)
 {
   int buf[size];
-  /* We don't know whether offset < offset2.  */
+  /* We don't know whether offset > offset2.  */
   buf[size + offset - offset2] = 42;
 }
 
