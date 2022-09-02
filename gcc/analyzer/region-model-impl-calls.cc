@@ -850,7 +850,7 @@ region_model::impl_call_realloc (const call_details &cd)
 	  if (old_size_sval)
 	    {
 	      const svalue *copied_size_sval
-		= get_copied_size (model, old_size_sval, new_size_sval);
+		= get_copied_size (old_size_sval, new_size_sval);
 	      const region *copied_old_reg
 		= model->m_mgr->get_sized_region (freed_reg, NULL,
 						  copied_size_sval);
@@ -895,26 +895,38 @@ region_model::impl_call_realloc (const call_details &cd)
     }
 
   private:
-    /* Return the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL if comparable.
-       Otherwise, return NEW_SIZE_SVAL.  */
-    const svalue *get_copied_size (region_model *model,
-				   const svalue *old_size_sval,
+    /* Return the lesser of OLD_SIZE_SVAL and NEW_SIZE_SVAL.
+       If either one is symbolic, the symbolic svalue is returned.  */
+    const svalue *get_copied_size (const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
-      tristate ts
-	= model->eval_condition (old_size_sval, LT_EXPR, new_size_sval);
-      switch (ts.get_value ())
+      tree old_size_cst = old_size_sval->maybe_get_constant ();
+      tree new_size_cst = new_size_sval->maybe_get_constant ();
+
+      if (old_size_cst && new_size_cst)
 	{
-	  case tristate::TS_TRUE:
-	    return old_size_sval;
-	  case tristate::TS_FALSE:
-	  case tristate::TS_UNKNOWN:
-	    /* If we can't reason about the inequality, still return
-	       NEW_SIZE_SVAL, because most implementations won't move
-	       when the buffer shrinks.  */
-	    return new_size_sval;
-	  default:
-	    gcc_unreachable ();
+	  /* Both are constants and comparable.  */
+	  tree cmp = fold_binary (LT_EXPR, boolean_type_node,
+				  old_size_cst, new_size_cst);
+	  if (cmp == boolean_true_node)
+	    {
+	      /* If we can't reason about the inequality, still return
+		NEW_SIZE_SVAL, because most implementations won't move
+		when the buffer shrinks.  */
+	      return new_size_sval;
+	    }
+	  else if (new_size_cst)
+	    {
+	      /* OLD_SIZE_SVAL is symbolic, so return that.  */
+	      return old_size_sval;
+	    }
+	  else
+	    {
+	      /* NEW_SIZE_SVAL is symbolic or both are symbolic.
+		 Return NEW_SIZE_SVAL, because implementations of realloc
+		 probably only moves the buffer if the new size is larger.  */
+	      return new_size_sval;
+	    }
 	}
     }
   };
