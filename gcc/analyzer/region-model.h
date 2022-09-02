@@ -470,6 +470,8 @@ private:
 		   const_fn_result_svalue *> const_fn_result_values_map_t;
   const_fn_result_values_map_t m_const_fn_result_values_map;
 
+  hash_map<const svalue *, const constant_svalue *> m_cached_folded_values_map;
+
   bool m_checking_feasibility;
 
   /* "Dynamically-allocated" svalue instances.

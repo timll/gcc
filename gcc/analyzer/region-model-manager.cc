@@ -2023,8 +2023,14 @@ region_model_manager::maybe_fold_svalue (const svalue *sval,
 					 folding_mode mode,
 					 constraint_manager *cm)
 {
+  if (const constant_svalue **ptr_to_cached
+	= m_cached_folded_values_map.get (sval))
+    return *ptr_to_cached;
+
   folding_visitor v (sval, mode, this, cm);
-  return v.get_result ();
+  const constant_svalue *result = v.get_result ();
+  m_cached_folded_values_map.put (sval, result);
+  return result;
 }
 
 } // namespace ana
