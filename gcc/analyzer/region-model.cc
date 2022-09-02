@@ -1942,18 +1942,18 @@ region_model::get_cst_tree_with_upper_bound (const svalue *sval, bool &folded) c
   if (cst_tree && TREE_CODE (cst_tree) == INTEGER_CST)
     return cst_tree;
 
-  const constant_svalue *folded_sval
-    = m_mgr->maybe_fold_svalue (sval, folding_mode::FM_UB,
-                                m_constraints);
-  if (folded_sval)
-    {
-      tree folded_tree = folded_sval->get_constant ();
-      if (TREE_CODE (folded_tree) == INTEGER_CST)
-        {
-          folded = true;
-          return folded_tree;
-        }
-    }
+  // const constant_svalue *folded_sval
+  //   = m_mgr->maybe_fold_svalue (sval, folding_mode::FM_UB,
+  //                               m_constraints);
+  // if (folded_sval)
+  //   {
+  //     tree folded_tree = folded_sval->get_constant ();
+  //     if (TREE_CODE (folded_tree) == INTEGER_CST)
+  //       {
+  //         folded = true;
+  //         return folded_tree;
+  //       }
+  //   }
 
   return NULL_TREE;
 }
