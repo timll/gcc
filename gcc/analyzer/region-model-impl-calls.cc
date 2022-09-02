@@ -908,25 +908,23 @@ region_model::impl_call_realloc (const call_details &cd)
 	  /* Both are constants and comparable.  */
 	  tree cmp = fold_binary (LT_EXPR, boolean_type_node,
 				  old_size_cst, new_size_cst);
+
 	  if (cmp == boolean_true_node)
-	    {
-	      /* If we can't reason about the inequality, still return
-		NEW_SIZE_SVAL, because most implementations won't move
-		when the buffer shrinks.  */
-	      return new_size_sval;
-	    }
-	  else if (new_size_cst)
-	    {
-	      /* OLD_SIZE_SVAL is symbolic, so return that.  */
-	      return old_size_sval;
-	    }
+	    return old_size_sval;
 	  else
-	    {
-	      /* NEW_SIZE_SVAL is symbolic or both are symbolic.
-		 Return NEW_SIZE_SVAL, because implementations of realloc
-		 probably only moves the buffer if the new size is larger.  */
-	      return new_size_sval;
-	    }
+	    return new_size_sval;
+	}
+      else if (new_size_cst)
+	{
+	  /* OLD_SIZE_SVAL is symbolic, so return that.  */
+	  return old_size_sval;
+	}
+      else
+	{
+	  /* NEW_SIZE_SVAL is symbolic or both are symbolic.
+	     Return NEW_SIZE_SVAL, because implementations of realloc
+	     probably only moves the buffer if the new size is larger.  */
+	  return new_size_sval;
 	}
     }
   };
