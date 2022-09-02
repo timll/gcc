@@ -4289,12 +4289,12 @@ region_model::eval_condition_without_cm (const svalue *lhs,
 	  return res;
       }
 
-  if (op == GT_EXPR)
-    {
-      tristate res = symbolic_greater_than (lhs, rhs);
-      if (res.is_known ())
-        return res;
-    }
+  // if (op == GT_EXPR)
+  //   {
+  //     tristate res = symbolic_greater_than (lhs, rhs);
+  //     if (res.is_known ())
+  //       return res;
+  //   }
 
   return tristate::TS_UNKNOWN;
 }
