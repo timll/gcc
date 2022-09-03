@@ -362,6 +362,10 @@ public:
 
   void dump_untracked_regions () const;
 
+private:
+  bool too_complex_p (const complexity &c) const;
+  bool reject_if_too_complex (svalue *sval);
+
   const svalue *maybe_fold_unaryop (tree type, enum tree_code op,
 				    const svalue *arg);
   const svalue *maybe_fold_binop (tree type, enum tree_code op,
@@ -380,10 +384,6 @@ public:
 						       tree cst, const svalue *arg1);
   const svalue *maybe_fold_asm_output_svalue (tree type,
 					      const vec<const svalue *> &inputs);
-private:
-  bool too_complex_p (const complexity &c) const;
-  bool reject_if_too_complex (svalue *sval);
-
 
   logger *m_logger;
 
