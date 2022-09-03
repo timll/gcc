@@ -4202,7 +4202,7 @@ is_positive_svalue (const svalue *sval)
 /* Return true if A is definitely larger than B.
 
    Limitation: does not account for integer overflows and does not try to
-	       return false, so it can not be used negated. */
+	       return false, so it can not be used negated.  */
 
 tristate
 region_model::symbolic_greater_than (const binop_svalue *bin_a,
