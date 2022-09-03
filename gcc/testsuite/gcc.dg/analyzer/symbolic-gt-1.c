@@ -1,69 +1,54 @@
+#include <string.h>
 #include "analyzer-decls.h"
 
 /* Test GT_EXPR comparison of symbolic values.  */
-
-void test1 (unsigned i)
+void test1 (size_t size)
 {
-  unsigned a = i;
-  unsigned b = i;
-  __analyzer_eval (a > b); /* { dg-warning "FALSE" } */
-
-  a = i + 1;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-
-  /* Again i + 4294967295 in gimple, but i - 1 in dynamic execution...  */
-  a = i - 1;
-  __analyzer_eval (a > b); /* { dg-bogus "TRUE" "" { xfail *-*-* } } */
-
-  a = i * 2;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-
-  a = i * i;
+  size_t a = 4 * size + 1;
+  size_t b = 4 * size;
   __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
 }
 
-void test2 (int i)
+void test2 (size_t size, size_t offset)
 {
-  int a = i * i;
-  int b = i;
-  /* Operand i is left but is an int and thus, possibly negative.  The
-    elimination algorithm misses that the other eliminated operand also
-    was i, but that is a limitation of the algorithm.  */
-  __analyzer_eval (a > b); /* { dg-bogus "UNKNOWN" "" { xfail *-*-* } } */
+  size_t a = size + offset;
+  size_t b = size;
+  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
 }
 
-void test3 (int i, int j)
+void test3 (size_t size, size_t offset)
 {
-  int a = i * j;
-  int b = i * j;
-  __analyzer_eval (a > b); /* { dg-warning "FALSE" } */
-  a = j * i;
-  __analyzer_eval (a > b); /* { dg-warning "FALSE" } */
+  size_t a = size * offset;
+  size_t b = size;
+  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
+}
 
-  a = (i * j) + 1;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-  a = (j * i) + 1;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-
-  a = i * (j + 1);
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-  a = (i + 1) * j;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
-
-  a = a + b;
+void test4 (size_t size)
+{
+  size_t op = -1;
+  size_t a = size + op;
+  size_t b = size;
   __analyzer_eval (a > b); /* { dg-warning "UNKNOWN" } */
 }
 
-void test4 (int i, int j, int k)
+void test5 (size_t size)
 {
-  int a = (i + j + k + 1) * (j + k) * k;
-  int b = (i + j + k) * (j + k) * k;
-  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
+  size_t a = size - 1;
+  size_t b = size;
+  __analyzer_eval (a > b); /* { dg-warning "UNKNOWN" } */
 }
 
-void test5 (int i, int j, int k)
+void test6 (size_t size, int offset)
 {
-  int a = (i + j + k - 1) * (j + k) * k;
-  int b = (i + j + k) * (j + k) * k;
+  /* OFFSET is a symbolic integer, thus could be negative.  */
+  size_t a = size + offset;
+  size_t b = size;
   __analyzer_eval (a > b); /* { dg-warning "UNKNOWN" } */
+}
+
+void test7 (size_t size, size_t mul)
+{
+  size_t a = mul * size + 1;
+  size_t b = mul * size;
+  __analyzer_eval (a > b); /* { dg-warning "TRUE" } */
 }

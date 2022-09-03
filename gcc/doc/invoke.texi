@@ -456,7 +456,6 @@ Objective-C and Objective-C++ Dialects}.
 -Wno-analyzer-imprecise-fp-arithmetic @gol
 -Wno-analyzer-jump-through-null @gol
 -Wno-analyzer-malloc-leak @gol
--Wno-analyzer-maybe-out-of-bounds @gol
 -Wno-analyzer-mismatching-deallocation @gol
 -Wno-analyzer-null-argument @gol
 -Wno-analyzer-null-dereference @gol
@@ -9763,7 +9762,6 @@ Enabling this option effectively enables the following warnings:
 -Wanalyzer-imprecise-fp-arithmetic @gol
 -Wanalyzer-jump-through-null @gol
 -Wanalyzer-malloc-leak @gol
--Wanalyzer-maybe-out-of-bounds @gol
 -Wanalyzer-mismatching-deallocation @gol
 -Wanalyzer-null-argument @gol
 -Wanalyzer-null-dereference @gol
@@ -9984,18 +9982,6 @@ pointer allocated via an allocator is leaked: either @code{malloc},
 or a function marked with attribute @code{malloc}.
 
 See @uref{https://cwe.mitre.org/data/definitions/401.html, CWE-401: Missing Release of Memory after Effective Lifetime}.
-
-@item -Wno-analyzer-maybe-out-of-bounds
-@opindex Wanalyzer-maybe-out-of-bounds
-@opindex Wno-analyzer-maybe-out-of-bounds
-This warning requires @option{-fanalyzer} to enable it; use
-@option{-Wno-analyzer-maybe-out-of-bounds} to disable it.
-
-This diagnostic warns for path through the code in which a buffer may be
-read or written out-of-bounds.  The diagnostic also uses invariants the
-analyzer collected to fold symbolic values to constant values.
-
-See @uref{https://cwe.mitre.org/data/definitions/119.html, CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer}.
 
 @item -Wno-analyzer-mismatching-deallocation
 @opindex Wanalyzer-mismatching-deallocation

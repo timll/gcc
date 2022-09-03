@@ -233,12 +233,6 @@ public:
 
 namespace ana {
 
-enum class folding_mode {
-  FM_EQ, /* Only fold toward known values.  */
-  FM_UB, /* Fold toward the upper bound.  */
-  FM_LB  /* Fold toward the lower bound.  */
-};
-
 /* A class responsible for owning and consolidating region and svalue
    instances.
    region and svalue instances are immutable as far as clients are
@@ -368,10 +362,6 @@ public:
 
   void dump_untracked_regions () const;
 
-  const constant_svalue * maybe_fold_svalue (const svalue *sval,
-					     enum folding_mode mode,
-					     constraint_manager *cm);
-
   const svalue *maybe_fold_unaryop (tree type, enum tree_code op,
 				    const svalue *arg);
   const svalue *maybe_fold_binop (tree type, enum tree_code op,
@@ -469,8 +459,6 @@ private:
   typedef hash_map<const_fn_result_svalue::key_t,
 		   const_fn_result_svalue *> const_fn_result_values_map_t;
   const_fn_result_values_map_t m_const_fn_result_values_map;
-
-  hash_map<const svalue *, const constant_svalue *> m_cached_folded_values_map;
 
   bool m_checking_feasibility;
 
@@ -729,6 +717,9 @@ class region_model
 				      const svalue *rhs) const;
   tristate compare_initial_and_pointer (const initial_svalue *init,
 					const region_svalue *ptr) const;
+  tristate symbolic_greater_than (const binop_svalue *a,
+                                  const svalue *b) const;
+  tristate structural_equality (const svalue *a, const svalue *b) const;
   tristate eval_condition (tree lhs,
 			   enum tree_code op,
 			   tree rhs,
@@ -891,8 +882,6 @@ class region_model
                               region_model_context *ctxt) const;
   void check_region_bounds (const region *reg, enum access_direction dir,
 			    region_model_context *ctxt) const;
-
-  tree get_cst_tree_with_upper_bound (const svalue *sval, bool &folded) const;
 
   void check_call_args (const call_details &cd) const;
   void check_external_function_for_access_attr (const gcall *call,

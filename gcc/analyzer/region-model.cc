@@ -74,7 +74,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "calls.h"
 #include "is-a.h"
-#include <set>
 
 #if ENABLE_ANALYZER
 
@@ -1275,9 +1274,9 @@ class out_of_bounds : public pending_diagnostic_subclass<out_of_bounds>
 {
 public:
   out_of_bounds (const region *reg, tree diag_arg,
-		 byte_range out_of_bounds_range, bool maybe)
+                 byte_range out_of_bounds_range)
   : m_reg (reg), m_diag_arg (diag_arg),
-    m_out_of_bounds_range (out_of_bounds_range), m_maybe (maybe)
+    m_out_of_bounds_range (out_of_bounds_range)
   {}
 
   const char *get_kind () const final override
@@ -1294,8 +1293,6 @@ public:
 
   int get_controlling_option () const final override
   {
-    if (m_maybe)
-      return OPT_Wanalyzer_maybe_out_of_bounds;
     return OPT_Wanalyzer_out_of_bounds;
   }
 
@@ -1308,7 +1305,6 @@ protected:
   const region *m_reg;
   tree m_diag_arg;
   byte_range m_out_of_bounds_range;
-  bool m_maybe;
 };
 
 /* Abstract subclass to complaing about out-of-bounds
@@ -1318,8 +1314,8 @@ class past_the_end : public out_of_bounds
 {
 public:
   past_the_end (const region *reg, tree diag_arg, byte_range range,
-		tree byte_bound, bool maybe)
-  : out_of_bounds (reg, diag_arg, range, maybe), m_byte_bound (byte_bound)
+		tree byte_bound)
+  : out_of_bounds (reg, diag_arg, range), m_byte_bound (byte_bound)
   {}
 
   bool operator== (const past_the_end &other) const
@@ -1349,8 +1345,8 @@ class buffer_overflow : public past_the_end
 {
 public:
   buffer_overflow (const region *reg, tree diag_arg,
-		   byte_range range, tree byte_bound, bool maybe)
-  : past_the_end (reg, diag_arg, range, byte_bound, maybe)
+		   byte_range range, tree byte_bound)
+  : past_the_end (reg, diag_arg, range, byte_bound)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1434,8 +1430,8 @@ class buffer_overread : public past_the_end
 {
 public:
   buffer_overread (const region *reg, tree diag_arg,
-		   byte_range range, tree byte_bound, bool maybe)
-  : past_the_end (reg, diag_arg, range, byte_bound, maybe)
+		   byte_range range, tree byte_bound)
+  : past_the_end (reg, diag_arg, range, byte_bound)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1502,9 +1498,8 @@ public:
 class buffer_underflow : public out_of_bounds
 {
 public:
-  buffer_underflow (const region *reg, tree diag_arg,
-                    byte_range range, bool maybe)
-  : out_of_bounds (reg, diag_arg, range, maybe)
+  buffer_underflow (const region *reg, tree diag_arg, byte_range range)
+  : out_of_bounds (reg, diag_arg, range)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1552,9 +1547,8 @@ public:
 class buffer_underread : public out_of_bounds
 {
 public:
-  buffer_underread (const region *reg, tree diag_arg,
-                    byte_range range, bool maybe)
-  : out_of_bounds (reg, diag_arg, range, maybe)
+  buffer_underread (const region *reg, tree diag_arg, byte_range range)
+  : out_of_bounds (reg, diag_arg, range)
   {}
 
   bool emit (rich_location *rich_loc) final override
@@ -1597,17 +1591,17 @@ public:
   }
 };
 
-/* Diagnostic to complain about out-of-bounds read/writes where
-   the value is symbolic.  */
+/* Abstract class to complain about out-of-bounds read/writes where
+   the values are symbolic.  */
 
 class symbolic_past_the_end
   : public pending_diagnostic_subclass<symbolic_past_the_end>
 {
 public:
-  symbolic_past_the_end (const region *reg, tree offset, tree num_bytes,
-                         tree capacity, enum access_direction dir)
-    : m_reg (reg), m_offset (offset), m_num_bytes (num_bytes),
-      m_capacity (capacity), m_dir (dir)
+  symbolic_past_the_end (const region *reg, tree diag_arg, tree offset,
+                         tree num_bytes, tree capacity)
+  : m_reg (reg), m_diag_arg (diag_arg), m_offset (offset),
+    m_num_bytes (num_bytes), m_capacity (capacity)
   {}
 
   const char *get_kind () const final override
@@ -1618,35 +1612,15 @@ public:
   bool operator== (const symbolic_past_the_end &other) const
   {
     return m_reg == other.m_reg
+           && pending_diagnostic::same_tree_p (m_diag_arg, other.m_diag_arg)
            && pending_diagnostic::same_tree_p (m_offset, other.m_offset)
            && pending_diagnostic::same_tree_p (m_num_bytes, other.m_num_bytes)
-           && pending_diagnostic::same_tree_p (m_capacity, other.m_capacity)
-           && m_dir == other.m_dir;
+           && pending_diagnostic::same_tree_p (m_capacity, other.m_capacity);
   }
 
   int get_controlling_option () const final override
   {
     return OPT_Wanalyzer_out_of_bounds;
-  }
-
-  bool emit (rich_location *rich_loc) final override
-  {
-    return warning_at (rich_loc, get_controlling_option (),
-                       "access past the end of the buffer");
-  }
-
-  label_text describe_final_event (const evdesc::final_event &ev) final override
-  {
-    if (m_offset)
-      {
-        if (m_num_bytes)
-          return ev.formatted_print ("accessing %qE bytes with offset %qE"
-                                     " exceeds the buffer",
-                                     m_num_bytes, m_offset);
-        return ev.formatted_print ("access with offset %qE exceeds the buffer",
-                                   m_offset);
-      }
-    return ev.formatted_print ("access exceeds the buffer");
   }
 
   void mark_interesting_stuff (interesting_t *interest) final override
@@ -1664,245 +1638,97 @@ public:
     return label_text ();
   }
 
-private:
+protected:
   const region *m_reg;
+  tree m_diag_arg;
   tree m_offset;
   tree m_num_bytes;
   tree m_capacity;
-  enum access_direction m_dir;
 };
 
-/* Add all operands of SVAL within a series of binary expressions with
-   the same commutative operator OP to SET.  */
+/* Concrete subclass to complain about overflows with symbolic values.  */
 
-static void
-find_all_operands (enum tree_code op, std::multiset<const svalue *> *set,
-                   const svalue *sval)
+class symbolic_buffer_overflow : public symbolic_past_the_end
 {
-  gcc_assert (commutative_tree_code (op));
+public:
+  symbolic_buffer_overflow (const region *reg, tree diag_arg, tree offset,
+                            tree num_bytes, tree capacity)
+  : symbolic_past_the_end (reg, diag_arg, offset, num_bytes, capacity)
+  {}
 
-  if (const binop_svalue *binop = dyn_cast <const binop_svalue *> (sval))
-    {
-      if (binop->get_op () == op)
-        {
-          find_all_operands (op, set, binop->get_arg0 ());
-          find_all_operands (op, set, binop->get_arg1 ());
-          return;
-        }
-    }
-  set->insert (sval);
-}
-
-/* Return true if SVAL is definitely positive.  */
-
-static bool
-is_positive_svalue (const svalue *sval)
-{
-  if (tree cst = sval->maybe_get_constant ())
-    {
-      tree cmp = fold_binary (GT_EXPR, boolean_type_node, cst, integer_zero_node);
-      return cmp == boolean_true_node;
-    }
-  if (const unaryop_svalue *un_op = dyn_cast <const unaryop_svalue *> (sval))
-    return is_positive_svalue (un_op->get_arg ());
-  return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
-}
-
-/* Return true if all elements of SET are definitely positive.  */
-
-static bool
-all_positive (std::multiset<const svalue *> *set)
-{
-  for (auto iter = set->begin (); iter != set->end (); iter++)
-    if (!is_positive_svalue (*iter))
-      return false;
-  return true;
-}
-
-/* Combines all constant_svalues using OP.  */
-
-static bit_size_t
-combine_all_constants (enum tree_code op, std::multiset<const svalue *> *set)
-{
-  gcc_assert (op == PLUS_EXPR || op == MULT_EXPR);
-
-  /* Initialize with the neutral element.  */
-  bit_size_t accum;
-  if (op == PLUS_EXPR)
-    accum = (int) 0;
-  else
-    accum = (int) 1;
-  for (auto iter = set->begin (); iter != set->end ();)
-    {
-      if (tree cst = (*iter)->maybe_get_constant ())
-        {
-          if (op == PLUS_EXPR)
-            accum += wi::to_offset (cst);
-          else
-            accum *= wi::to_offset (cst);
-          iter = set->erase (iter);
-        }
-      else
-        ++iter;
-    }
-  return accum;
-}
-
-/* Return true if A and B are structurally equivalent.  */
-
-static bool
-structural_equality (const svalue *a, const svalue *b)
-{
-  switch (a->get_kind ())
-    {
-    default:
-      return false;
-    case SK_CONJURED:
-    case SK_INITIAL:
-      return a == b;
-    case SK_CONSTANT:
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    switch (m_reg->get_memory_space ())
       {
-        tree a_cst = a->maybe_get_constant ();
-        tree b_cst = b->maybe_get_constant ();
-        if (a_cst && b_cst)
-          return tree_int_cst_equal (a_cst, b_cst);
+      default:
+        m.add_cwe (787);
+        return warning_meta (rich_loc, m, get_controlling_option (),
+                             "buffer overflow");
+      case MEMSPACE_STACK:
+        m.add_cwe (121);
+        return warning_meta (rich_loc, m, get_controlling_option (),
+                             "stack-based buffer overflow");
+      case MEMSPACE_HEAP:
+        m.add_cwe (122);
+        return warning_meta (rich_loc, m, get_controlling_option (),
+                             "heap-based buffer overflow");
       }
-      return false;
-    case SK_UNARYOP:
-      {
-        const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
-        if (const unaryop_svalue *un_b = dyn_cast <const unaryop_svalue *> (b))
-          return un_a->get_op () == un_b->get_op ()
-                 && pending_diagnostic::same_tree_p (un_a->get_type (),
-                                                     un_b->get_type ())
-                 && structural_equality (un_a->get_arg (),
-                                         un_b->get_arg ());
-      }
-      return false;
-    case SK_BINOP:
-      {
-        const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
-        if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
-          if (bin_a->get_op () == bin_b->get_op ())
-            {
-              if (commutative_tree_code (bin_a->get_op ()))
-                return (structural_equality (bin_a->get_arg0 (),
-                                              bin_b->get_arg0 ())
-                            && structural_equality (bin_a->get_arg1 (),
-                                                    bin_b->get_arg1 ()))
-                        || (structural_equality (bin_a->get_arg0 (),
-                                                  bin_b->get_arg1 ())
-                            && structural_equality (bin_a->get_arg0 (),
-                                                  bin_b->get_arg1 ()));
-                else
-                  return structural_equality (bin_a->get_arg0 (),
-                                              bin_b->get_arg0 ())
-                        && structural_equality (bin_a->get_arg1 (),
-                                                bin_b->get_arg1 ());
-            }
-      }
-      return false;
-    }
-}
+  }
 
-/* Return true if A is definitely larger than B.  */
+  label_text
+  describe_final_event (const evdesc::final_event &ev) final override
+  {
+    if (m_offset && m_diag_arg)
+      {
+        if (m_num_bytes)
+          return ev.formatted_print ("write of %qE bytes at offset %qE exceeds"
+                                     " %qE", m_num_bytes, m_offset,
+                                             m_diag_arg);
+        return ev.formatted_print ("write at offset %qE exceeds %qE",
+                                   m_offset, m_diag_arg);
+      }
+    if (m_diag_arg)
+      return ev.formatted_print ("out-of-bounds write on %qE", m_diag_arg);
+    return ev.formatted_print ("out-of-bounds write");
+  }
+};
 
-static tristate
-symbolic_greater_than (const svalue *a, const svalue *b)
+/* Concrete subclass to complain about overreads with symbolic values.  */
+
+class symbolic_buffer_overread : public symbolic_past_the_end
 {
-  /* As this function is specifically for checking the bounds with symbolic
-     values and we assume that A holds the next byte after the access, which
-     is always a binop OFFSET_SVAL + NUM_BYTES_SVAL.  */
-  const binop_svalue *binop_a = dyn_cast<const binop_svalue *> (a);
-  if (!binop_a)
-    return tristate::unknown ();
+public:
+  symbolic_buffer_overread (const region *reg, tree diag_arg, tree offset,
+                            tree num_bytes, tree capacity)
+  : symbolic_past_the_end (reg, diag_arg, offset, num_bytes, capacity)
+  {}
 
-  tree_code op = binop_a->get_op ();
-  if (op == PLUS_EXPR || op == MULT_EXPR)
-    {
-      /* + and * are commutative, thus we have to ignore
-         the order of the operands. */
-      std::multiset<const svalue *> ops_a;
-      find_all_operands (op, &ops_a, a);
-      std::multiset<const svalue *> ops_b;
-      find_all_operands (op, &ops_b, b);
+  bool emit (rich_location *rich_loc) final override
+  {
+    diagnostic_metadata m;
+    m.add_cwe (126);
+    return warning_meta (rich_loc, m, get_controlling_option (),
+                         "buffer overread");
+  }
 
-      /* Try to eliminate all operands on the same level that are referentially
-         equal aka constant_svalues, initial_svalues and conjured_svalues.  */
-      for (auto iter = ops_a.begin (); iter != ops_a.end ();)
-        {
-          const svalue *operand = *iter;
-          auto match = ops_b.find (operand);
-          if (match != ops_b.end ())
-            {
-              iter = ops_a.erase (iter);
-              ops_b.erase (match);
-            }
-          else
-            ++iter;
-        }
-
-      /* Accumulate up all constant_svalues that are left
-         in both sets and remove them.  */
-      byte_size_t a_csts = combine_all_constants (op, &ops_a);
-      byte_size_t b_csts = combine_all_constants (op, &ops_b);
-
-      bool eliminated_greater_subexpression = false;
-      /* If B still has operands, try to resolve binops in A.
-         E.g. for cases like B = i * j and A = (i * j) + 1.  */
-      if (!ops_b.empty ())
-        for (auto iter_a = ops_a.begin (); iter_a != ops_a.end ();)
-          {
-            bool erased = false;
-            if ((*iter_a)->get_kind () == SK_BINOP)
-              {
-                for (auto iter_b = ops_b.begin (); iter_b != ops_b.end ();)
-                  /* Assuming later either one operand is left in A or
-                    a_csts > b_csts is true, we also want to eliminate
-                    structural equivalent operands. */ 
-                  if (structural_equality (*iter_a, *iter_b))
-                    {
-                      iter_a = ops_a.erase (iter_a);
-                      iter_b = ops_b.erase (iter_b);
-                      erased = true;
-                      break;
-                    }
-                  else if (symbolic_greater_than (*iter_a, *iter_b).is_true ())
-                    {
-                      iter_a = ops_a.erase (iter_a);
-                      iter_b = ops_b.erase (iter_b);
-                      erased = true;
-                      eliminated_greater_subexpression = true;
-                      break;
-                    }
-                  else
-                    ++iter_b;
-              }
-            if (!erased)
-              ++iter_a;
-          }
-
-      /* We have eliminated all operands of B
-         and A could be greater than B.  */
-      if (ops_b.empty () && a_csts >= b_csts)
-        {
-          /* Check that all operands that are left in B are positive or when
-             there are no operands left, that A is not equal to B. */
-          if ((!ops_a.empty () && all_positive (&ops_a))
-              || (ops_a.empty ()
-                  && (eliminated_greater_subexpression
-                      || a_csts != b_csts)))
-            return tristate (true);
-        }
-
-      /* Check if A <= B.  */
-      if (ops_a.empty () && a_csts <= b_csts && all_positive (&ops_b)
-          && !eliminated_greater_subexpression)
-        return tristate (false);
-    }
-
-  return tristate::unknown ();
-}
+  label_text
+  describe_final_event (const evdesc::final_event &ev) final override
+  {
+    if (m_offset && m_diag_arg)
+      {
+        if (m_num_bytes)
+          return ev.formatted_print ("read of %qE bytes at offset %qE exceeds"
+                                     " %qE", m_num_bytes, m_offset,
+                                             m_diag_arg);
+        return ev.formatted_print ("read at offset %qE exceeds %qE",
+                                   m_offset, m_diag_arg);
+      }
+    if (m_diag_arg)
+      return ev.formatted_print ("out-of-bounds read on %qE", m_diag_arg);
+    return ev.formatted_print ("out-of-bounds read");
+  }
+};
 
 /* Check whether an access is past the end of the BASE_REG.  */
 
@@ -1919,41 +1745,39 @@ void region_model::check_symbolic_bounds (const region *base_reg,
     = m_mgr->get_or_create_binop (sym_byte_offset->get_type (), PLUS_EXPR,
                                   sym_byte_offset, num_bytes_sval);
 
-  // if (symbolic_greater_than (next_byte, capacity).is_true ())
   if (eval_condition_without_cm (next_byte, GT_EXPR, capacity).is_true ())
     {
+      tree diag_arg = get_representative_tree (base_reg);
       tree offset_tree = get_representative_tree (sym_byte_offset);
       tree num_bytes_tree = get_representative_tree (num_bytes_sval);
       tree capacity_tree = get_representative_tree (capacity);
-      ctxt->warn (new symbolic_past_the_end (base_reg, offset_tree,
-                                             num_bytes_tree,
-                                             capacity_tree, dir));
+      switch (dir)
+        {
+        default:
+          gcc_unreachable ();
+          break;
+        case DIR_READ:
+          ctxt->warn (new symbolic_buffer_overread (base_reg, diag_arg,
+                                                    offset_tree,
+                                                    num_bytes_tree,
+                                                    capacity_tree));
+          break;
+        case DIR_WRITE:
+          ctxt->warn (new symbolic_buffer_overflow (base_reg, diag_arg,
+                                                    offset_tree,
+                                                    num_bytes_tree,
+                                                    capacity_tree));
+          break;
+        }
     }
 }
 
-/* Try to convert SVAL to a integer_cst tree, possibly using upper bounds,
-   and return the tree. If folding was involded, FOLDED is set to true.
-   Otherwise, return NULL_TREE.  */
-
-tree
-region_model::get_cst_tree_with_upper_bound (const svalue *sval, bool &folded) const
+static tree
+maybe_get_integer_cst_tree (const svalue *sval)
 {
   tree cst_tree = sval->maybe_get_constant ();
   if (cst_tree && TREE_CODE (cst_tree) == INTEGER_CST)
     return cst_tree;
-
-  // const constant_svalue *folded_sval
-  //   = m_mgr->maybe_fold_svalue (sval, folding_mode::FM_UB,
-  //                               m_constraints);
-  // if (folded_sval)
-  //   {
-  //     tree folded_tree = folded_sval->get_constant ();
-  //     if (TREE_CODE (folded_tree) == INTEGER_CST)
-  //       {
-  //         folded = true;
-  //         return folded_tree;
-  //       }
-  //   }
 
   return NULL_TREE;
 }
@@ -1967,6 +1791,7 @@ region_model::check_region_bounds (const region *reg,
 {
   gcc_assert (ctxt);
 
+  /* Get the offset.  */
   region_offset reg_offset = reg->get_offset (m_mgr);
   const region *base_reg = reg_offset.get_base_region ();
 
@@ -1976,50 +1801,32 @@ region_model::check_region_bounds (const region *reg,
   if (base_reg->symbolic_p ())
     return;
 
-  /* Signalizes that at least one concrete value
-     was folded using the collected constraints. */ 
-  bool folded = false;
-
-  /* Get the offset.  */
-  bool concrete_offset = true;
-  byte_offset_t offset_unsigned;
-  if (reg_offset.symbolic_p ())
-    {
-      const svalue *sym_byte_offset = reg_offset.get_symbolic_byte_offset ();
-      tree byte_offset_tree = get_cst_tree_with_upper_bound (sym_byte_offset,
-                                                             folded);
-      if (byte_offset_tree)
-        offset_unsigned = wi::to_offset (byte_offset_tree);
-      else
-        concrete_offset = false;
-    }
-  else
-    offset_unsigned = reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT;
-
   /* Find out how many bytes were accessed.  */
   const svalue *num_bytes_sval = reg->get_byte_size_sval (m_mgr);
-  tree num_bytes_tree = get_cst_tree_with_upper_bound (num_bytes_sval, folded);
+  tree num_bytes_tree = maybe_get_integer_cst_tree (num_bytes_sval);
 
   /* Get the capacity of the buffer.  */
   const svalue *capacity = get_capacity (base_reg);
-  tree cst_capacity_tree = get_cst_tree_with_upper_bound (capacity, folded);
+  tree cst_capacity_tree = maybe_get_integer_cst_tree (capacity);
 
   /* The constant offset from a pointer is represented internally as a sizetype
      but should be interpreted as a signed value here.  The statement below
-     converts the offset to a signed integer with the same precision the
-     sizetype has on the target system.
+     converts the offset from bits to bytes and then to a signed integer with
+     the same precision the sizetype has on the target system.
 
      For example, this is needed for out-of-bounds-3.c test1 to pass when
      compiled with a 64-bit gcc build targeting 32-bit systems.  */
-  byte_offset_t offset
-    = (int) offset_unsigned.to_shwi (TYPE_PRECISION (size_type_node));
+  byte_offset_t offset;
+  if (!reg_offset.symbolic_p ())
+    offset = wi::sext (reg_offset.get_bit_offset () >> LOG2_BITS_PER_UNIT,
+                       TYPE_PRECISION (size_type_node));
 
   /* If either the offset or the number of bytes accessed are symbolic,
      we have to reason about symbolic values.  */
-  if (!concrete_offset || !num_bytes_tree)
+  if (reg_offset.symbolic_p () || !num_bytes_tree)
     {
       const svalue* byte_offset_sval;
-      if (concrete_offset)
+      if (!reg_offset.symbolic_p ())
         {
           tree offset_tree = wide_int_to_tree (integer_type_node, offset);
           byte_offset_sval
@@ -2035,8 +1842,7 @@ region_model::check_region_bounds (const region *reg,
   /* Otherwise continue to check with concrete values.  */
   byte_range out (0, 0);
   /* NUM_BYTES_TREE should always be interpreted as unsigned.  */
-  byte_offset_t num_bytes_unsigned
-    = (unsigned) wi::to_offset (num_bytes_tree).to_uhwi ();
+  byte_offset_t num_bytes_unsigned = wi::to_offset (num_bytes_tree);
   byte_range read_bytes (offset, num_bytes_unsigned);
   /* If read_bytes has a subset < 0, we do have an underflow.  */
   if (read_bytes.falls_short_of_p (0, &out))
@@ -2048,10 +1854,10 @@ region_model::check_region_bounds (const region *reg,
           gcc_unreachable ();
           break;
         case DIR_READ:
-          ctxt->warn (new buffer_underread (reg, diag_arg, out, folded));
+          ctxt->warn (new buffer_underread (reg, diag_arg, out));
           break;
         case DIR_WRITE:
-          ctxt->warn (new buffer_underflow (reg, diag_arg, out, folded));
+          ctxt->warn (new buffer_underflow (reg, diag_arg, out));
           break;
         }
     }
@@ -2076,12 +1882,10 @@ region_model::check_region_bounds (const region *reg,
           gcc_unreachable ();
           break;
         case DIR_READ:
-          ctxt->warn (new buffer_overread (reg, diag_arg, out,
-                                           byte_bound, folded));
+          ctxt->warn (new buffer_overread (reg, diag_arg, out, byte_bound));
           break;
         case DIR_WRITE:
-          ctxt->warn (new buffer_overflow (reg, diag_arg, out,
-                                           byte_bound, folded));
+          ctxt->warn (new buffer_overflow (reg, diag_arg, out, byte_bound));
           break;
         }
     }
@@ -4289,11 +4093,47 @@ region_model::eval_condition_without_cm (const svalue *lhs,
 	  return res;
       }
 
-  if (op == GT_EXPR)
+  /* Handle comparisons between two svalues with more than one operand.  */
+	if (const binop_svalue *binop = lhs->dyn_cast_binop_svalue ())
     {
-      tristate res = symbolic_greater_than (lhs, rhs);
-      if (res.is_known ())
-        return res;
+      switch (op)
+        {
+        default:
+          break;
+        case EQ_EXPR:
+          {
+            /* TODO: binops can be equal even if they are not structurally
+                     equal in case of commutative operators.  */
+            tristate res = structural_equality (lhs, rhs);
+            if (res.is_true ())
+              return res;
+          }
+          break;
+        case LE_EXPR:
+          {
+            tristate res = structural_equality (lhs, rhs);
+            if (res.is_true ())
+              return res;
+          }
+          break;
+        case GE_EXPR:
+          {
+            tristate res = structural_equality (lhs, rhs);
+            if (res.is_true ())
+              return res;
+            res = symbolic_greater_than (binop, rhs);
+            if (res.is_true ())
+              return res;
+          }
+          break;
+        case GT_EXPR:
+          {
+            tristate res = symbolic_greater_than (binop, rhs);
+            if (res.is_true ())
+              return res;
+          }
+          break;
+        }
     }
 
   return tristate::TS_UNKNOWN;
@@ -4315,6 +4155,88 @@ region_model::compare_initial_and_pointer (const initial_svalue *init,
       return tristate::TS_FALSE;
 
   return tristate::TS_UNKNOWN;
+}
+
+/* Return true if SVAL is definitely positive.  */
+
+static bool
+is_positive_svalue (const svalue *sval)
+{
+  if (tree cst = sval->maybe_get_constant ())
+    return get_range_pos_neg (cst) == 1;
+  /* Assume a binary operation size_t + int.  The analyzer wraps the int in an
+     unaryop_svalue, converting it to a size_t, but in the dynamic execution
+     the result is smaller than the first operand.  Thus, we have to look if
+     the argument of the unaryop_svalue is also positive.  */
+  if (const unaryop_svalue *un_op = dyn_cast <const unaryop_svalue *> (sval))
+    return is_positive_svalue (un_op->get_arg ());
+  return sval->get_type () && TYPE_UNSIGNED (sval->get_type ());
+}
+
+/* Return true if A is definitely larger than B.
+
+   Limitation: does not account for integer overflows and does not try to
+               return false, so it can not be used negated. */
+
+tristate
+region_model::symbolic_greater_than (const binop_svalue *bin_a,
+                                     const svalue *b) const
+{
+  /* Only proceed if the rhs of bin_a increases the value.  */
+  if ((bin_a->get_op () != PLUS_EXPR && bin_a->get_op () != MULT_EXPR)
+      || !is_positive_svalue (bin_a->get_arg1 ()))
+    return tristate::unknown ();
+
+  if (eval_condition_without_cm (bin_a->get_arg0 (), GE_EXPR, b).is_true ())
+    return tristate (tristate::TS_TRUE);
+  return tristate::unknown ();
+}
+
+/* Return true if A and B are equal structurally.  */
+
+tristate
+region_model::structural_equality (const svalue *a, const svalue *b) const
+{
+  switch (a->get_kind ())
+    {
+    default:
+      return tristate::unknown ();
+    case SK_CONJURED:
+    case SK_INITIAL:
+      return tristate (a == b);
+    case SK_CONSTANT:
+      {
+        tree a_cst = a->maybe_get_constant ();
+        tree b_cst = b->maybe_get_constant ();
+        if (a_cst && b_cst)
+          return tristate (tree_int_cst_equal (a_cst, b_cst));
+      }
+      return tristate (tristate::TS_FALSE);
+    case SK_UNARYOP:
+      {
+        const unaryop_svalue *un_a = as_a <const unaryop_svalue *> (a);
+        if (const unaryop_svalue *un_b = dyn_cast <const unaryop_svalue *> (b))
+          return tristate (pending_diagnostic::same_tree_p (un_a->get_type (),
+                                                            un_b->get_type ())
+                           && un_a->get_op () == un_b->get_op ()
+                           && structural_equality (un_a->get_arg (),
+                                                   un_b->get_arg ()));
+      }
+      return tristate (tristate::TS_FALSE);
+    case SK_BINOP:
+      {
+        const binop_svalue *bin_a = as_a <const binop_svalue *> (a);
+        if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
+          if (bin_a->get_op () == bin_b->get_op ())
+            {
+              return tristate (structural_equality (bin_a->get_arg0 (),
+                                                    bin_b->get_arg0 ())
+                               && structural_equality (bin_a->get_arg1 (),
+                                                       bin_b->get_arg1 ()));
+            }
+      }
+      return tristate (tristate::TS_FALSE);
+    }
 }
 
 /* Handle various constraints of the form:
