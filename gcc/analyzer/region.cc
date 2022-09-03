@@ -500,66 +500,66 @@ region::calc_offset (region_model_manager *mgr) const
   while (iter_region)
     {
       switch (iter_region->get_kind ())
-        {
-        case RK_FIELD:
-        case RK_ELEMENT:
-        case RK_OFFSET:
-        case RK_BIT_RANGE:
-          if (accum_byte_sval)
-            {
-              const svalue *sval
-                = iter_region->get_relative_symbolic_offset (mgr);
-              accum_byte_sval
-                = mgr->get_or_create_binop (sval->get_type (), PLUS_EXPR,
-                                            accum_byte_sval, sval);
-              iter_region = iter_region->get_parent_region ();
-            }
-          else
-            {
-              bit_offset_t rel_bit_offset;
-              if (iter_region->get_relative_concrete_offset (&rel_bit_offset))
-                {
-                  accum_bit_offset += rel_bit_offset;
-                  iter_region = iter_region->get_parent_region ();
-                }
-              else
-                {
-                  /* If the iter_region is not concrete anymore, convert the
-                     accumulated bits to a svalue in bytes and revisit the
-                     iter_region collecting the symbolic value.  */
-                  byte_offset_t byte_offset = accum_bit_offset / BITS_PER_UNIT;
-                  tree offset_tree = wide_int_to_tree (integer_type_node,
-                                                       byte_offset);
-                  accum_byte_sval
-                    = mgr->get_or_create_constant_svalue (offset_tree);
-                }
-            }
-          continue;
-        case RK_SIZED:
-          iter_region = iter_region->get_parent_region ();
-          continue;
+	{
+	case RK_FIELD:
+	case RK_ELEMENT:
+	case RK_OFFSET:
+	case RK_BIT_RANGE:
+	  if (accum_byte_sval)
+	    {
+	      const svalue *sval
+		= iter_region->get_relative_symbolic_offset (mgr);
+	      accum_byte_sval
+		= mgr->get_or_create_binop (sval->get_type (), PLUS_EXPR,
+					    accum_byte_sval, sval);
+	      iter_region = iter_region->get_parent_region ();
+	    }
+	  else
+	    {
+	      bit_offset_t rel_bit_offset;
+	      if (iter_region->get_relative_concrete_offset (&rel_bit_offset))
+		{
+		  accum_bit_offset += rel_bit_offset;
+		  iter_region = iter_region->get_parent_region ();
+		}
+	      else
+		{
+		  /* If the iter_region is not concrete anymore, convert the
+		     accumulated bits to a svalue in bytes and revisit the
+		     iter_region collecting the symbolic value.  */
+		  byte_offset_t byte_offset = accum_bit_offset / BITS_PER_UNIT;
+		  tree offset_tree = wide_int_to_tree (integer_type_node,
+						       byte_offset);
+		  accum_byte_sval
+		    = mgr->get_or_create_constant_svalue (offset_tree);
+		}
+	    }
+	  continue;
+	case RK_SIZED:
+	  iter_region = iter_region->get_parent_region ();
+	  continue;
 
-        case RK_CAST:
-          {
-            const cast_region *cast_reg
-              = as_a <const cast_region *> (iter_region);
-            iter_region = cast_reg->get_original_region ();
-          }
-          continue;
+	case RK_CAST:
+	  {
+	    const cast_region *cast_reg
+	      = as_a <const cast_region *> (iter_region);
+	    iter_region = cast_reg->get_original_region ();
+	  }
+	  continue;
 
-        default:
-          return accum_byte_sval
-                  ? region_offset::make_symbolic (iter_region,
-                                                  accum_byte_sval)
-                  : region_offset::make_concrete (iter_region,
-                                                  accum_bit_offset);
-        }
+	default:
+	  return accum_byte_sval
+		  ? region_offset::make_symbolic (iter_region,
+						  accum_byte_sval)
+		  : region_offset::make_concrete (iter_region,
+						  accum_bit_offset);
+	}
     }
 
   return accum_byte_sval ? region_offset::make_symbolic (iter_region,
-                                                         accum_byte_sval)
-                         : region_offset::make_concrete (iter_region,
-                                                         accum_bit_offset);
+							 accum_byte_sval)
+			 : region_offset::make_concrete (iter_region,
+							 accum_bit_offset);
 }
 
 /* Base implementation of region::get_relative_concrete_offset vfunc.  */
@@ -1364,7 +1364,7 @@ field_region::get_relative_symbolic_offset (region_model_manager *mgr) const
   if (get_relative_concrete_offset (&out))
     {
       tree cst_tree
-        = wide_int_to_tree (integer_type_node, out / BITS_PER_UNIT);
+	= wide_int_to_tree (integer_type_node, out / BITS_PER_UNIT);
       return mgr->get_or_create_constant_svalue (cst_tree);
     }
   return mgr->get_or_create_unknown_svalue (integer_type_node);
@@ -1450,7 +1450,7 @@ element_region::get_relative_symbolic_offset (region_model_manager *mgr) const
   if (hwi_byte_size > 0)
 	  {
       tree byte_size_tree = wide_int_to_tree (integer_type_node,
-                                              hwi_byte_size);
+					      hwi_byte_size);
       const svalue *byte_size_sval
 	= mgr->get_or_create_constant_svalue (byte_size_tree);
       return mgr->get_or_create_binop (integer_type_node, MULT_EXPR,
@@ -1520,7 +1520,7 @@ offset_region::get_relative_concrete_offset (bit_offset_t *out) const
 
 const svalue *
 offset_region::get_relative_symbolic_offset (region_model_manager *mgr
-                                              ATTRIBUTE_UNUSED) const
+					      ATTRIBUTE_UNUSED) const
 {
   return get_byte_offset ();
 }
