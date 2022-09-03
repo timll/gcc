@@ -1742,7 +1742,7 @@ void region_model::check_symbolic_bounds (const region *base_reg,
   gcc_assert (ctxt);
 
   const svalue *next_byte
-    = m_mgr->get_or_create_binop (sym_byte_offset->get_type (), PLUS_EXPR,
+    = m_mgr->get_or_create_binop (num_bytes_sval->get_type (), PLUS_EXPR,
                                   sym_byte_offset, num_bytes_sval);
 
   if (eval_condition_without_cm (next_byte, GT_EXPR, capacity).is_true ())
@@ -4163,7 +4163,7 @@ static bool
 is_positive_svalue (const svalue *sval)
 {
   if (tree cst = sval->maybe_get_constant ())
-    return get_range_pos_neg (cst) == 1;
+    return !zerop (cst) && get_range_pos_neg (cst) == 1;
   /* Assume a binary operation size_t + int.  The analyzer wraps the int in an
      unaryop_svalue, converting it to a size_t, but in the dynamic execution
      the result is smaller than the first operand.  Thus, we have to look if
