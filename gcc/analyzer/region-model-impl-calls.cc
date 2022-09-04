@@ -1038,52 +1038,6 @@ region_model::impl_call_strcpy (const call_details &cd)
   set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
 }
 
-/* Handle the on_call_pre part of "strncpy" and "__builtin_strncpy_chk".  */
-
-void
-region_model::impl_call_strncpy (const call_details &cd)
-{
-  const svalue *dest_sval = cd.get_arg_svalue (0);
-  const region *dest_reg = deref_rvalue (dest_sval, cd.get_arg_tree (0),
-					 cd.get_ctxt ());
-  const svalue *src_sval = cd.get_arg_svalue (1);
-  const region *src_reg = deref_rvalue (src_sval, cd.get_arg_tree (1),
-					cd.get_ctxt ());
-  const svalue *src_contents_sval = get_store_value (src_reg,
-						     cd.get_ctxt ());
-  const svalue *num_bytes_sval = cd.get_arg_svalue (2);
-
-  cd.maybe_set_lhs (dest_sval);
-
-  const svalue *string_size_sval = get_string_size (src_reg);
-  if (string_size_sval->get_kind () == SK_UNKNOWN)
-    string_size_sval = get_string_size (src_contents_sval);
-
-  /* strncpy copies until a zero terminator is reached or n bytes were copied.
-     Determine the lesser of both here.  */
-  tristate ts = eval_condition (string_size_sval, LT_EXPR, num_bytes_sval);
-  const svalue *copied_bytes_sval;
-  switch (ts.get_value ())
-    {
-      case tristate::TS_TRUE:
-	copied_bytes_sval = string_size_sval;
-	break;
-      case tristate::TS_FALSE:
-	copied_bytes_sval = num_bytes_sval;
-	break;
-      case tristate::TS_UNKNOWN:
-	copied_bytes_sval
-	  = m_mgr->get_or_create_unknown_svalue (size_type_node);
-	break;
-      default:
-	gcc_unreachable ();
-    }
-
-  const region *sized_dest_reg = m_mgr->get_sized_region (dest_reg, NULL_TREE,
-							  copied_bytes_sval);
-  set_value (sized_dest_reg, src_contents_sval, cd.get_ctxt ());
-}
-
 /* Handle the on_call_pre part of "strlen".  */
 
 void

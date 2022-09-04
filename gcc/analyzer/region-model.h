@@ -634,7 +634,6 @@ class region_model
   void impl_call_realloc (const call_details &cd);
   void impl_call_strchr (const call_details &cd);
   void impl_call_strcpy (const call_details &cd);
-  void impl_call_strncpy (const call_details &cd);
   void impl_call_strlen (const call_details &cd);
   void impl_call_operator_new (const call_details &cd);
   void impl_call_operator_delete (const call_details &cd);
