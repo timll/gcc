@@ -4247,7 +4247,22 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
   return tristate::unknown ();
 }
 
-/* Return true if A and B are equal structurally.  */
+/* Return true if A and B are equal structurally.
+
+   Structural equality means that A and B are equal if the svalues A and B have
+   the same nodes at the same positions in the tree and the leafs are equal.
+   Equality for conjured_svalues and initial_svalues is determined by comparing
+   the pointers while constants are compared by value.
+
+   For example,
+     binop_svalue (mult_expr,
+       initial_svalue(‘size_t’, decl_region(..., 'some_var')),
+       constant_svalue(‘size_t’, 4))
+   and
+     binop_svalue (mult_expr,
+       initial_svalue(‘size_t’, decl_region(..., 'some_var'),
+       constant_svalue(‘sizetype’, 4))
+   are structurally equal.  */
 
 tristate
 region_model::structural_equality (const svalue *a, const svalue *b) const
