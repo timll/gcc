@@ -4218,8 +4218,8 @@ is_positive_svalue (const svalue *sval)
   tree type = sval->get_type ();
   if (!type)
     return false;
-  /* Assume a binary operation size_t + int.  The analyzer wraps the int in an
-     unaryop_svalue, converting it to a size_t, but in the dynamic execution
+  /* Consider a binary operation size_t + int.  The analyzer wraps the int in
+     an unaryop_svalue, converting it to a size_t, but in the dynamic execution
      the result is smaller than the first operand.  Thus, we have to look if
      the argument of the unaryop_svalue is also positive.  */
   if (const unaryop_svalue *un_op = dyn_cast <const unaryop_svalue *> (sval))
