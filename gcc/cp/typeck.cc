@@ -8897,7 +8897,56 @@ cp_build_c_cast (location_t loc, tree type, tree expr,
 
   return error_mark_node;
 }
-
+
+/* Warn when a value is moved to itself with std::move.  LHS is the target,
+   RHS may be the std::move call, and LOC is the location of the whole
+   assignment.  */
+
+static void
+maybe_warn_self_move (location_t loc, tree lhs, tree rhs)
+{
+  if (!warn_self_move)
+    return;
+
+  /* C++98 doesn't know move.  */
+  if (cxx_dialect < cxx11)
+    return;
+
+  if (processing_template_decl)
+    return;
+
+  if (!REFERENCE_REF_P (rhs)
+      || TREE_CODE (TREE_OPERAND (rhs, 0)) != CALL_EXPR)
+    return;
+  tree fn = TREE_OPERAND (rhs, 0);
+  if (!is_std_move_p (fn))
+    return;
+
+  /* Just a little helper to strip * and various NOPs.  */
+  auto extract_op = [] (tree &op) {
+    STRIP_NOPS (op);
+    while (INDIRECT_REF_P (op))
+      op = TREE_OPERAND (op, 0);
+    op = maybe_undo_parenthesized_ref (op);
+    STRIP_ANY_LOCATION_WRAPPER (op);
+  };
+
+  tree arg = CALL_EXPR_ARG (fn, 0);
+  extract_op (arg);
+  if (TREE_CODE (arg) == ADDR_EXPR)
+    arg = TREE_OPERAND (arg, 0);
+  tree type = TREE_TYPE (lhs);
+  tree orig_lhs = lhs;
+  extract_op (lhs);
+  if (cp_tree_equal (lhs, arg))
+    {
+      auto_diagnostic_group d;
+      if (warning_at (loc, OPT_Wself_move,
+		      "moving %qE of type %qT to itself", orig_lhs, type))
+	inform (loc, "remove %<std::move%> call");
+    }
+}
+
 /* For use from the C common bits.  */
 tree
 build_modify_expr (location_t location,
@@ -9101,6 +9150,8 @@ cp_build_modify_expr (location_t loc, tree lhs, enum tree_code modifycode,
 
       if (modifycode == NOP_EXPR)
 	{
+	  maybe_warn_self_move (loc, lhs, rhs);
+
 	  if (c_dialect_objc ())
 	    {
 	      result = objc_maybe_build_modify_expr (lhs, rhs);
@@ -10397,11 +10448,15 @@ maybe_warn_pessimizing_move (tree expr, tree type, bool return_p)
   if (!CLASS_TYPE_P (type))
     return;
 
+  bool wrapped_p = false;
   /* A a = std::move (A());  */
   if (TREE_CODE (expr) == TREE_LIST)
     {
       if (list_length (expr) == 1)
-	expr = TREE_VALUE (expr);
+	{
+	  expr = TREE_VALUE (expr);
+	  wrapped_p = true;
+	}
       else
 	return;
     }
@@ -10410,7 +10465,10 @@ maybe_warn_pessimizing_move (tree expr, tree type, bool return_p)
   else if (TREE_CODE (expr) == CONSTRUCTOR)
     {
       if (CONSTRUCTOR_NELTS (expr) == 1)
-	expr = CONSTRUCTOR_ELT (expr, 0)->value;
+	{
+	  expr = CONSTRUCTOR_ELT (expr, 0)->value;
+	  wrapped_p = true;
+	}
       else
 	return;
     }
@@ -10458,6 +10516,8 @@ maybe_warn_pessimizing_move (tree expr, tree type, bool return_p)
       /* Warn if the move is redundant.  It is redundant when we would
 	 do maybe-rvalue overload resolution even without std::move.  */
       else if (warn_redundant_move
+	       /* This doesn't apply for return {std::move (t)};.  */
+	       && !wrapped_p
 	       && !warning_suppressed_p (expr, OPT_Wredundant_move)
 	       && (moved = treat_lvalue_as_rvalue_p (arg, /*return*/true)))
 	{
