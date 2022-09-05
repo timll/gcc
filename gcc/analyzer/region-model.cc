@@ -4240,18 +4240,19 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
   /* Eliminate the right-hand side of both svalues.  */
   if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
     if (bin_a->get_op () == bin_b->get_op ()
-        && eval_condition_without_cm (bin_a->get_arg1 (),
-                                      GT_EXPR,
-                                      bin_b->get_arg1 ()).is_true ())
-      return eval_condition_without_cm (bin_a->get_arg0 (),
-                                        GE_EXPR,
-                                        bin_b->get_arg0 ());
+	&& eval_condition_without_cm (bin_a->get_arg1 (),
+				      GT_EXPR,
+				      bin_b->get_arg1 ()).is_true ()
+	&& eval_condition_without_cm (bin_a->get_arg0 (),
+				      GE_EXPR,
+				      bin_b->get_arg0 ()).is_true ())
+      return tristate (tristate::TS_TRUE);
 
-  /* Otherwise, try to remove a positive offset or factor from BIN_A.  */
+  /* Otherwise, try to remove a positive offset or factor only from BIN_A.  */
   if ((bin_a->get_op () == PLUS_EXPR || bin_a->get_op () == MULT_EXPR)
       && is_positive_svalue (bin_a->get_arg1 ()))
-    return eval_condition_without_cm (bin_a->get_arg0 (),
-                                      GE_EXPR, b).is_true ();
+    if (eval_condition_without_cm (bin_a->get_arg0 (),GE_EXPR, b).is_true ())
+      return tristate (tristate::TS_TRUE);
 
   return tristate::unknown ();
 }
@@ -4287,6 +4288,7 @@ region_model::structural_equality (const svalue *a, const svalue *b) const
     {
     default:
       return tristate::unknown ();
+    /* SK_CONJURED and SK_INITIAL are already */
     case SK_CONSTANT:
       {
 	tree a_cst = a->maybe_get_constant ();
