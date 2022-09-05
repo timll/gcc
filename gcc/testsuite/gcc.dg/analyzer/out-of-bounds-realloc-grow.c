@@ -6,18 +6,12 @@
    realloc when the buffer is growing.  */
 
 #include <stdlib.h>
-#include <stdio.h>
 
 /* Indicate that the file is treated as binary.  */
 #define RF_BINARY 0x1
 
-/* Indicate that the file content contains sensitive information.  */
-#define RF_SENSITIVE 0x2
-
-#include <sys/stat.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -44,7 +38,6 @@ fread_file (FILE *stream, int flags, size_t *length)
 
         {
           char *new_buf;
-          size_t save_alloc = alloc;
 
           if (alloc < PTRDIFF_MAX - alloc / 2)
             alloc = alloc + alloc / 2;
