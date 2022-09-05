@@ -4237,13 +4237,22 @@ tristate
 region_model::symbolic_greater_than (const binop_svalue *bin_a,
 				     const svalue *b) const
 {
-  /* Only proceed if the rhs of bin_a increases the value.  */
-  if ((bin_a->get_op () != PLUS_EXPR && bin_a->get_op () != MULT_EXPR)
-      || !is_positive_svalue (bin_a->get_arg1 ()))
-    return tristate::unknown ();
+  /* Eliminate the right-hand side of both svalues.  */
+  if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
+    if (bin_a->get_op () == bin_b->get_op ()
+        && eval_condition_without_cm (bin_a->get_arg1 (),
+                                      GT_EXPR,
+                                      bin_b->get_arg1 ()).is_true ())
+      return eval_condition_without_cm (bin_a->get_arg0 (),
+                                        GE_EXPR,
+                                        bin_b->get_arg0 ());
 
-  if (eval_condition_without_cm (bin_a->get_arg0 (), GE_EXPR, b).is_true ())
-    return tristate (tristate::TS_TRUE);
+  /* Otherwise, try to remove a positive offset or factor from BIN_A.  */
+  if ((bin_a->get_op () == PLUS_EXPR || bin_a->get_op () == MULT_EXPR)
+      && is_positive_svalue (bin_a->get_arg1 ()))
+    return eval_condition_without_cm (bin_a->get_arg0 (),
+                                      GE_EXPR, b).is_true ();
+
   return tristate::unknown ();
 }
 
@@ -7588,7 +7597,7 @@ test_array_2 ()
   /* Verify get_offset for "arr[i]".  */
   {
     const region *arr_i_reg = model.get_lvalue (arr_i, NULL);
-    region_offset offset = arr_1_reg->get_offset (&mgr);
+    region_offset offset = arr_i_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (arr, NULL));
     ASSERT_EQ (offset.get_symbolic_byte_offset ()->get_kind (), SK_BINOP);
   }
