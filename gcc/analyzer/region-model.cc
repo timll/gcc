@@ -4268,12 +4268,12 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
 
    For example,
      binop_svalue (mult_expr,
-       initial_svalue(‘size_t’, decl_region(..., 'some_var')),
-       constant_svalue(‘size_t’, 4))
+       initial_svalue (‘size_t’, decl_region (..., 'some_var')),
+       constant_svalue (‘size_t’, 4))
    and
      binop_svalue (mult_expr,
-       initial_svalue(‘size_t’, decl_region(..., 'some_var'),
-       constant_svalue(‘sizetype’, 4))
+       initial_svalue (‘size_t’, decl_region (..., 'some_var'),
+       constant_svalue (‘sizetype’, 4))
    are structurally equal.  A concrete C code example, where this occurs, can
    be found in test7 of out-of-bounds-5.c.  */
 
@@ -4288,7 +4288,8 @@ region_model::structural_equality (const svalue *a, const svalue *b) const
     {
     default:
       return tristate::unknown ();
-    /* SK_CONJURED and SK_INITIAL are already */
+    /* SK_CONJURED and SK_INITIAL are already handled
+       by the referential equality above.  */
     case SK_CONSTANT:
       {
 	tree a_cst = a->maybe_get_constant ();

@@ -901,7 +901,7 @@ region_model::impl_call_realloc (const call_details &cd)
 				   const svalue *old_size_sval,
 				   const svalue *new_size_sval) const
     {
-      tristate res 
+      tristate res
 	= model->eval_condition (old_size_sval, GT_EXPR, new_size_sval);
       switch (res.get_value ())
 	{
