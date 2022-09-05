@@ -4252,7 +4252,9 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
    Structural equality means that A and B are equal if the svalues A and B have
    the same nodes at the same positions in the tree and the leafs are equal.
    Equality for conjured_svalues and initial_svalues is determined by comparing
-   the pointers while constants are compared by value.
+   the pointers while constants are compared by value.  That behavior is useful
+   to check for binaryop_svlaues that evaluate to the same concrete value but
+   might use one operand with a different type but the same constant value. 
 
    For example,
      binop_svalue (mult_expr,
@@ -4262,18 +4264,20 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
      binop_svalue (mult_expr,
        initial_svalue(‘size_t’, decl_region(..., 'some_var'),
        constant_svalue(‘sizetype’, 4))
-   are structurally equal.  */
+   are structurally equal.  A concrete C code example, where this occurs, can
+   be found in test7 of out-of-bounds-5.c.  */
 
 tristate
 region_model::structural_equality (const svalue *a, const svalue *b) const
 {
+  /* If A and B are referentially equal, they are also structurally equal.  */
+  if (a == b)
+    return tristate (tristate::TS_TRUE);
+
   switch (a->get_kind ())
     {
     default:
       return tristate::unknown ();
-    case SK_CONJURED:
-    case SK_INITIAL:
-      return tristate (a == b);
     case SK_CONSTANT:
       {
 	tree a_cst = a->maybe_get_constant ();
@@ -7579,6 +7583,14 @@ test_array_2 ()
     region_offset offset = arr_1_reg->get_offset (&mgr);
     ASSERT_EQ (offset.get_base_region (), model.get_lvalue (arr, NULL));
     ASSERT_EQ (offset.get_bit_offset (), INT_TYPE_SIZE);
+  }
+
+  /* Verify get_offset for "arr[i]".  */
+  {
+    const region *arr_i_reg = model.get_lvalue (arr_i, NULL);
+    region_offset offset = arr_1_reg->get_offset (&mgr);
+    ASSERT_EQ (offset.get_base_region (), model.get_lvalue (arr, NULL));
+    ASSERT_EQ (offset.get_symbolic_byte_offset ()->get_kind (), SK_BINOP);
   }
 
   /* "arr[i] = i;" - this should remove the earlier bindings.  */
