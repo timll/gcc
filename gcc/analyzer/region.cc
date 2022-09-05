@@ -1355,7 +1355,9 @@ field_region::get_relative_concrete_offset (bit_offset_t *out) const
 
 
 /* Implementation of region::get_relative_symbolic_offset vfunc
-   for field_region.  */
+   for field_region.
+   If known, the returned svalue is equal to the offset converted to bytes and
+   rounded off.  */
 
 const svalue *
 field_region::get_relative_symbolic_offset (region_model_manager *mgr) const
@@ -1771,7 +1773,9 @@ bit_range_region::get_relative_concrete_offset (bit_offset_t *out) const
 }
 
 /* Implementation of region::get_relative_symbolic_offset vfunc for
-   bit_range_region.  */
+   bit_range_region.
+   The returned svalue is equal to the offset converted to bytes and
+   rounded off.  */
 
 const svalue *
 bit_range_region::get_relative_symbolic_offset (region_model_manager *mgr)

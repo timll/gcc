@@ -4254,7 +4254,7 @@ region_model::symbolic_greater_than (const binop_svalue *bin_a,
    Equality for conjured_svalues and initial_svalues is determined by comparing
    the pointers while constants are compared by value.  That behavior is useful
    to check for binaryop_svlaues that evaluate to the same concrete value but
-   might use one operand with a different type but the same constant value. 
+   might use one operand with a different type but the same constant value.
 
    For example,
      binop_svalue (mult_expr,

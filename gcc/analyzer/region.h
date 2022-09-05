@@ -196,7 +196,8 @@ public:
      Otherwise return false.  */
   virtual bool get_relative_concrete_offset (bit_offset_t *out) const;
 
-  /* Get the offset in bytes as a svalue.  Might return an unknown_svalue.  */
+  /* Get the offset in bytes of this region relative to its parent as a svalue.
+     Might return an unknown_svalue.  */
   virtual const svalue *
   get_relative_symbolic_offset (region_model_manager *mgr) const;
 
