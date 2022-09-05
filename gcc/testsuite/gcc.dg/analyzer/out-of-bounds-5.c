@@ -67,18 +67,18 @@ void test8 (size_t size, size_t offset)
 {
   char src[size];
   char dst[size];
-  memcpy (dst, src, size + offset); /* { dg-line test6 } */
-  /* { dg-warning "overread" "warning" { target *-*-* } test6 } */
-  /* { dg-warning "overflow" "warning" { target *-*-* } test6 } */
+  memcpy (dst, src, size + offset); /* { dg-line test8 } */
+  /* { dg-warning "overread" "warning" { target *-*-* } test8 } */
+  /* { dg-warning "overflow" "warning" { target *-*-* } test8 } */
 }
 
 void test9 (size_t size, size_t offset)
 {
   int32_t src[size];
   int32_t dst[size];
-  memcpy (dst, src, 4 * size + 1); /* { dg-line test7 } */
-  /* { dg-warning "overread" "warning" { target *-*-* } test7 } */
-  /* { dg-warning "overflow" "warning" { target *-*-* } test7 } */
+  memcpy (dst, src, 4 * size + 1); /* { dg-line test9 } */
+  /* { dg-warning "overread" "warning" { target *-*-* } test9 } */
+  /* { dg-warning "overflow" "warning" { target *-*-* } test9 } */
 }
 
 /* Test for no false-positives.  */
