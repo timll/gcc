@@ -4237,23 +4237,25 @@ tristate
 region_model::symbolic_greater_than (const binop_svalue *bin_a,
 				     const svalue *b) const
 {
-  /* Eliminate the right-hand side of both svalues.  */
-  if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
-    if (bin_a->get_op () == bin_b->get_op ()
-	&& eval_condition_without_cm (bin_a->get_arg1 (),
-				      GT_EXPR,
-				      bin_b->get_arg1 ()).is_true ()
-	&& eval_condition_without_cm (bin_a->get_arg0 (),
-				      GE_EXPR,
-				      bin_b->get_arg0 ()).is_true ())
-      return tristate (tristate::TS_TRUE);
+  if (bin_a->get_op () == PLUS_EXPR || bin_a->get_op () == MULT_EXPR)
+    {
+      /* Eliminate the right-hand side of both svalues.  */
+      if (const binop_svalue *bin_b = dyn_cast <const binop_svalue *> (b))
+	if (bin_a->get_op () == bin_b->get_op ()
+	    && eval_condition_without_cm (bin_a->get_arg1 (),
+					  GT_EXPR,
+					  bin_b->get_arg1 ()).is_true ()
+	    && eval_condition_without_cm (bin_a->get_arg0 (),
+					  GE_EXPR,
+					  bin_b->get_arg0 ()).is_true ())
+	  return tristate (tristate::TS_TRUE);
 
-  /* Otherwise, try to remove a positive offset or factor only from BIN_A.  */
-  if ((bin_a->get_op () == PLUS_EXPR || bin_a->get_op () == MULT_EXPR)
-      && is_positive_svalue (bin_a->get_arg1 ()))
-    if (eval_condition_without_cm (bin_a->get_arg0 (),GE_EXPR, b).is_true ())
-      return tristate (tristate::TS_TRUE);
-
+      /* Otherwise, try to remove a positive offset or factor from BIN_A.  */
+      if (is_positive_svalue (bin_a->get_arg1 ())
+	  && eval_condition_without_cm (bin_a->get_arg0 (),
+					GE_EXPR, b).is_true ())
+	  return tristate (tristate::TS_TRUE);
+    }
   return tristate::unknown ();
 }
 
