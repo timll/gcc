@@ -821,8 +821,9 @@ handle_abnormal_edges (basic_block *dispatcher_bbs, basic_block for_bb,
       else
 	{
 	  tree arg = inner ? boolean_true_node : boolean_false_node;
-	  gimple *g = gimple_build_call_internal (IFN_ABNORMAL_DISPATCHER,
+	  gcall *g = gimple_build_call_internal (IFN_ABNORMAL_DISPATCHER,
 						 1, arg);
+	  gimple_call_set_ctrl_altering (g, true);
 	  gimple_stmt_iterator gsi = gsi_after_labels (*dispatcher);
 	  gsi_insert_after (&gsi, g, GSI_NEW_STMT);
 
@@ -1305,7 +1306,7 @@ end_recording_case_labels (void)
 
    Otherwise return NULL.  */
 
-static tree
+tree
 get_cases_for_edge (edge e, gswitch *t)
 {
   tree *slot;
@@ -9878,16 +9879,16 @@ execute_fixup_cfg (void)
 	    {
 	      if (stmt && is_gimple_call (stmt))
 		gimple_call_set_ctrl_altering (stmt, false);
-	      tree fndecl = builtin_decl_unreachable ();
-	      stmt = gimple_build_call (fndecl, 0);
+	      stmt = gimple_build_builtin_unreachable (UNKNOWN_LOCATION);
 	      gimple_stmt_iterator gsi = gsi_last_bb (bb);
 	      gsi_insert_after (&gsi, stmt, GSI_NEW_STMT);
 	      if (!cfun->after_inlining)
-		{
-		  gcall *call_stmt = dyn_cast <gcall *> (stmt);
-		  node->create_edge (cgraph_node::get_create (fndecl),
-				     call_stmt, bb->count);
-		}
+		if (tree fndecl = gimple_call_fndecl (stmt))
+		  {
+		    gcall *call_stmt = dyn_cast <gcall *> (stmt);
+		    node->create_edge (cgraph_node::get_create (fndecl),
+				       call_stmt, bb->count);
+		  }
 	    }
 	}
     }

@@ -4793,16 +4793,10 @@ cxx_init_decl_processing (void)
 	  }
       }
 
-    nullptr_type_node = make_node (NULLPTR_TYPE);
-    TYPE_SIZE (nullptr_type_node) = bitsize_int (GET_MODE_BITSIZE (ptr_mode));
-    TYPE_SIZE_UNIT (nullptr_type_node) = size_int (GET_MODE_SIZE (ptr_mode));
-    TYPE_UNSIGNED (nullptr_type_node) = 1;
-    TYPE_PRECISION (nullptr_type_node) = GET_MODE_BITSIZE (ptr_mode);
+    /* C++-specific nullptr initialization.  */
     if (abi_version_at_least (9))
       SET_TYPE_ALIGN (nullptr_type_node, GET_MODE_ALIGNMENT (ptr_mode));
-    SET_TYPE_MODE (nullptr_type_node, ptr_mode);
     record_builtin_type (RID_MAX, "decltype(nullptr)", nullptr_type_node);
-    nullptr_node = build_int_cst (nullptr_type_node, 0);
   }
 
   if (! supports_one_only ())
@@ -12413,14 +12407,20 @@ grokdeclarator (const cp_declarator *declarator,
 
   if (cxx_dialect >= cxx17 && type && is_auto (type)
       && innermost_code != cdk_function
+      /* Placeholder in parm gets a better error below.  */
+      && !(decl_context == PARM || decl_context == CATCHPARM)
       && id_declarator && declarator != id_declarator)
     if (tree tmpl = CLASS_PLACEHOLDER_TEMPLATE (type))
-    {
-      error_at (typespec_loc, "template placeholder type %qT must be followed "
-		"by a simple declarator-id", type);
-      inform (DECL_SOURCE_LOCATION (tmpl), "%qD declared here", tmpl);
-      type = error_mark_node;
-    }
+      {
+	auto_diagnostic_group g;
+	gcc_rich_location richloc (typespec_loc);
+	richloc.add_fixit_insert_after ("<>");
+	error_at (&richloc, "missing template argument list after %qE; "
+		  "for deduction, template placeholder must be followed "
+		  "by a simple declarator-id", tmpl);
+	inform (DECL_SOURCE_LOCATION (tmpl), "%qD declared here", tmpl);
+	type = error_mark_node;
+      }
 
   staticp = 0;
   inlinep = decl_spec_seq_has_spec_p (declspecs, ds_inline);
@@ -12898,6 +12898,7 @@ grokdeclarator (const cp_declarator *declarator,
 		  {
 		    if (!funcdecl_p || !dguide_name_p (unqualified_id))
 		      {
+			auto_diagnostic_group g;
 			error_at (typespec_loc, "deduced class "
 				  "type %qD in function return type",
 				  DECL_NAME (tmpl));
@@ -13480,7 +13481,7 @@ grokdeclarator (const cp_declarator *declarator,
       /* [dcl.meaning]/1: The optional attribute-specifier-seq following
 	 a declarator-id appertains to the entity that is declared.  */
       if (declarator->std_attributes != error_mark_node)
-	*attrlist = attr_chainon (*attrlist, declarator->std_attributes);
+	*attrlist = attr_chainon (declarator->std_attributes, *attrlist);
       else
 	/* We should have already diagnosed the issue (c++/78344).  */
 	gcc_assert (seen_error ());
@@ -13843,12 +13844,15 @@ grokdeclarator (const cp_declarator *declarator,
 	      else if (tree c = CLASS_PLACEHOLDER_TEMPLATE (auto_node))
 		{
 		  auto_diagnostic_group g;
-		  error_at (typespec_loc,
-			    "class template placeholder %qE not permitted "
-			    "in this context", c);
+		  gcc_rich_location richloc (typespec_loc);
+		  richloc.add_fixit_insert_after ("<>");
+		  error_at (&richloc,
+			    "missing template argument list after %qE; template "
+			    "placeholder not permitted in parameter", c);
 		  if (decl_context == PARM && cxx_dialect >= cxx20)
-		    inform (typespec_loc, "use %<auto%> for an "
+		    inform (typespec_loc, "or use %<auto%> for an "
 			    "abbreviated function template");
+		  inform (DECL_SOURCE_LOCATION (c), "%qD declared here", c);
 		}
 	      else
 		error_at (typespec_loc,
@@ -15337,6 +15341,11 @@ grok_op_properties (tree decl, bool complain)
        "operator ()".  */
     return true;
 
+  /* C++23 allows an arbitrary number of parameters and default arguments for
+     operator[], and none of the other checks below apply.  */
+  if (operator_code == ARRAY_REF && cxx_dialect >= cxx23)
+    return true;
+
   if (operator_code == COND_EXPR)
     {
       /* 13.4.0.3 */
@@ -15350,10 +15359,6 @@ grok_op_properties (tree decl, bool complain)
     {
       if (!arg)
 	{
-	  /* Variadic.  */
-	  if (operator_code == ARRAY_REF && cxx_dialect >= cxx23)
-	    break;
-
 	  error_at (loc, "%qD must not have variable number of arguments",
 		    decl);
 	  return false;
@@ -15414,8 +15419,6 @@ grok_op_properties (tree decl, bool complain)
     case OVL_OP_FLAG_BINARY:
       if (arity != 2)
 	{
-	  if (operator_code == ARRAY_REF && cxx_dialect >= cxx23)
-	    break;
 	  error_at (loc,
 		    methodp
 		    ? G_("%qD must have exactly one argument")
