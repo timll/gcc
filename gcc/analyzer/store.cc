@@ -380,17 +380,20 @@ bit_range::as_byte_range (byte_range *out) const
 void
 byte_range::dump_to_pp (pretty_printer *pp) const
 {
-  if (m_size_in_bytes == 1)
+  switch (m_size_in_bytes)
     {
-      pp_string (pp, "byte ");
-      pp_wide_int (pp, m_start_byte_offset, SIGNED);
-    }
-  else
-    {
-      pp_string (pp, "bytes ");
-      pp_wide_int (pp, m_start_byte_offset, SIGNED);
-      pp_string (pp, "-");
-      pp_wide_int (pp, get_last_byte_offset (), SIGNED);
+      case 0:
+        pp_string (pp, "empty");
+      case 1:
+        pp_string (pp, "byte ");
+        pp_wide_int (pp, m_start_byte_offset, SIGNED);
+        break;
+      default:
+        pp_string (pp, "bytes ");
+        pp_wide_int (pp, m_start_byte_offset, SIGNED);
+        pp_string (pp, "-");
+        pp_wide_int (pp, get_last_byte_offset (), SIGNED);
+        break;
     }
 }
 
@@ -455,7 +458,9 @@ bool
 byte_range::exceeds_p (const byte_range &other,
 		       byte_range *out_overhanging_byte_range) const
 {
-  if (other.get_last_byte_offset () < get_last_byte_offset ())
+  gcc_assert (!empty_p ());
+
+  if (other.get_next_byte_offset () < get_next_byte_offset ())
     {
       /* THIS definitely exceeds OTHER.  */
       byte_offset_t start = MAX (get_start_byte_offset (),
@@ -477,6 +482,8 @@ bool
 byte_range::falls_short_of_p (byte_offset_t offset,
 			      byte_range *out_fall_short_bytes) const
 {
+  gcc_assert (!empty_p ());
+
   if (get_start_byte_offset () < offset)
     {
       /* THIS falls short of OFFSET.  */
