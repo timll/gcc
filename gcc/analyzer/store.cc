@@ -380,20 +380,21 @@ bit_range::as_byte_range (byte_range *out) const
 void
 byte_range::dump_to_pp (pretty_printer *pp) const
 {
-  switch (m_size_in_bytes)
+  if (m_size_in_bytes == 0)
     {
-      case 0:
-        pp_string (pp, "empty");
-      case 1:
-        pp_string (pp, "byte ");
-        pp_wide_int (pp, m_start_byte_offset, SIGNED);
-        break;
-      default:
-        pp_string (pp, "bytes ");
-        pp_wide_int (pp, m_start_byte_offset, SIGNED);
-        pp_string (pp, "-");
-        pp_wide_int (pp, get_last_byte_offset (), SIGNED);
-        break;
+      pp_string (pp, "empty");
+    }
+  else if (m_size_in_bytes == 1)
+    {
+      pp_string (pp, "byte ");
+      pp_wide_int (pp, m_start_byte_offset, SIGNED);
+    }
+  else
+    {
+      pp_string (pp, "bytes ");
+      pp_wide_int (pp, m_start_byte_offset, SIGNED);
+      pp_string (pp, "-");
+      pp_wide_int (pp, get_last_byte_offset (), SIGNED);
     }
 }
 
