@@ -2112,8 +2112,8 @@ void region_model::check_region_overlap (const region *src,
 	return;
       byte_size_t num_bytes = TREE_INT_CST_LOW (num_bytes_tree);
 
-      region_offset src_offset = src->get_offset ();
-      region_offset dst_offset = dst->get_offset ();
+      region_offset src_offset = src->get_offset (m_mgr);
+      region_offset dst_offset = dst->get_offset (m_mgr);
       const region *src_base_reg = src_offset.get_base_region ();
       const region *dst_base_reg = dst_offset.get_base_region ();
 
