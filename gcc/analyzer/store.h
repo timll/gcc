@@ -236,12 +236,12 @@ struct bit_range
 
   void dump_to_pp (pretty_printer *pp) const;
   void dump () const;
-  
+
   bool empty_p () const
   {
     return m_size_in_bits == 0;
   }
-  
+
   bit_offset_t get_start_bit_offset () const
   {
     return m_start_bit_offset;
